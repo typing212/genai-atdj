@@ -130,3 +130,4 @@ Records a feature idea or design proposal. Claude will first restate and clarify
 - All hooks run via `uv run python` — no separate Python installation needed.
 - Do not commit real API keys. If you accidentally add them, rotate them immediately.
 - The `doc/ideas.md` and `doc/knowledge/` files are worth reading before starting a new work package — they capture design decisions and research done during planning.
+- `doc/blueprint.md` contains the full project specification: architecture, component breakdown, milestones, and technical decisions. Read it before starting any significant implementation work.

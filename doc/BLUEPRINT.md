@@ -33,16 +33,16 @@
 
 | WP | Name | Depends On |
 |---|---|---|
-| WP-01 | Project Setup & Catalog Bootstrap | — |
-| WP-02 | Static UI Wireframe | WP-01 (minimal) |
-| WP-03 | Basic Playback Engine | WP-01 |
-| WP-04 | Audio Feature Extraction | WP-01 |
-| WP-05 | Tanda Validator & Energy Arc | WP-01, WP-04 |
-| WP-06 | LangGraph Agent Core | WP-01, WP-04, WP-05 |
+| WP-01 | Project Setup | — |
+| WP-02 | Audio Feature Extraction & Catalog Bootstrap | WP-01 |
+| WP-03 | Static UI Wireframe | WP-01 (minimal) |
+| WP-04 | Basic Playback Engine | WP-01 |
+| WP-05 | Tanda Validator & Energy Arc | WP-01, WP-02 |
+| WP-06 | LangGraph Agent Core | WP-01, WP-02, WP-05 |
 | WP-07 | ChromaDB Ingest & RAG | WP-01 |
 | WP-08 | Audio Enhancement Pipeline | WP-01 |
 | WP-09 | Cortina Generation & Selection | WP-01 |
-| WP-10 | Full UI Integration | WP-02, WP-03, WP-06, WP-07 (core); WP-08, WP-09 (nice-to-have) |
+| WP-10 | Full UI Integration | WP-03, WP-04, WP-06, WP-07 (core); WP-08, WP-09 (nice-to-have) |
 | WP-11 | Evaluation & Demo Prep | WP-10 |
 
 ---
@@ -53,8 +53,8 @@
 
 | Week | Dates | WPs Completed | Person A | Person B | Person C |
 |---|---|---|---|---|---|
-| 1 | 3/22–3/28 | WP-01, WP-02 (in progress) | WP-01 setup + catalog | WP-01 schemas + config | WP-02 UI wireframe |
-| 2 | 3/29–4/4 | WP-02, WP-03, WP-04, WP-05 | WP-04 audio features | WP-05 validator + energy arc | WP-03 basic playback |
+| 1 | 3/22–3/28 | WP-01, WP-02, WP-03 (in progress) | WP-01 setup + WP-02 extraction | WP-01 schemas + config | WP-03 UI wireframe |
+| 2 | 3/29–4/4 | WP-03, WP-04, WP-05 | WP-05 validator + energy arc | WP-05 validator + energy arc | WP-04 basic playback |
 | 3 | 4/5–4/11 | WP-06, WP-07 | WP-06 agent (state + graph) | WP-06 agent (tools + nodes) | WP-07 RAG + ChromaDB |
 | 4 | 4/12–4/18 | WP-08, WP-09, WP-10 (in progress) | WP-08 audio enhancement | WP-09 cortina | WP-10 integration starts |
 | 5 | 4/19–4/25 | WP-10, WP-11 (in progress) | WP-10 polish + report: intro & architecture | WP-11 evaluation + report: evaluation & conclusion | WP-11 report: RAG & audio + results & metrics + demo script |
@@ -62,32 +62,67 @@
 
 ---
 
-### WP-01: Project Setup & Catalog Bootstrap
-**Deliverable:** Importable schemas, populated `catalog.csv`, test suite skeleton passing
+### WP-01: Project Setup
+**Deliverable:** Importable schemas, `config.py`, full directory structure, dummy `catalog.csv` for testing, test suite skeleton passing
 
-**Est. Effort:** ~12 hrs (without AI: 2–3×) · Week 1 (3/22–3/28)
+**Est. Effort:** ~8 hrs (without AI: 2–3×) · Week 1 (3/22–3/28)
 
 **Depends on:** —
 
-**Proof of Concept Test** (`notebooks/01_catalog_bootstrap.ipynb`): load 5 hardcoded rows from `catalog.csv`, instantiate `Track` schema for each, assert a valid row passes and an intentionally broken row raises a validation error.
+**Proof of Concept Test** (`notebooks/01_project_setup.ipynb`): load 5 dummy rows from `catalog.csv`, instantiate `Track` schema for each, assert a valid row passes and an intentionally broken row raises a validation error.
 
 **Detailed Tasks:**
-- Update `pyproject.toml` with all new dependencies; run `uv sync`
 - Create full directory structure (`atdj/`, `data/`, `notebooks/`, `tests/`)
 - Write `atdj/config.py` — paths, LLM initialization
 - Implement all four Pydantic schemas in `atdj/schemas/`
-- Populate `data/catalog.csv` with ≥80 tracks (manual entry or scraped from TODOTANGO.com):
-  columns: `id, title, orchestra, singer, style, year, decade, duration_seconds, file_path, tags, notes`
-- Write `tests/test_schemas.py` — instantiate valid and invalid Track/Tanda, assert validators fire
+- Create `data/catalog.csv` with dummy/empty rows (headers + ~5 placeholder rows) for schema testing:
+  columns: `id, title, orchestra, singer, style, year, decade, duration_seconds, file_path, tags, notes, bpm, energy, key, danceability`
+- Write `tests/test_schemas.py` — instantiate valid and invalid Track/Tanda using dummy data, assert validators fire
 
 ---
 
-### WP-02: Static UI Wireframe
+### WP-02: Audio Feature Extraction & Catalog Bootstrap
+**Deliverable:** `atdj/audio/features.py` and `atdj/audio/metadata.py` modules complete; `catalog.csv` fully populated with real metadata and extracted features for ~50 tango tracks; cortinas routed to `data/cortinas/`
+
+**Est. Effort:** ~10 hrs (without AI: 2–3×) · Week 1 (3/22–3/28)
+
+**Depends on:** WP-01
+
+**Proof of Concept Test** (`notebooks/02_audio_features.ipynb`): run `read_metadata()` + `extract_features()` on 3 sample tracks from `data/raw/`, print all fields, plot a BPM/energy bar chart. Confirm metadata fields are populated and feature values are in plausible ranges (BPM 50–200, energy 0–1) before running batch.
+
+**Source music:** "La Fiesta De Buenos Aires" CD series (40 volumes, ~29 tracks/volume). For WP-02 PoC and catalog bootstrap, use the first ~50 tango tracks (roughly Vol-01 and Vol-02). All volumes are processed in the full batch run.
+
+**Audio file routing (automated, no manual sorting):**
+- Filename contains `"Cortina"` (case-insensitive) → `data/cortinas/` tagged `source: milonga_sequence`
+- All other tracks → `data/raw/` (tango catalog)
+- Backup pop cortinas (from separate `Cortina/` source folder) → `data/cortinas/` tagged `source: backup_pool`
+
+**Metadata strategy:** Extract from MP3 ID3 tags using `mutagen`; fall back to filename parsing if tags are missing. The original Excel sequence reference may be consulted manually but the code must never depend on it.
+
+**Detailed Tasks:**
+- Implement `atdj/audio/metadata.py`:
+  - `read_metadata(file_path)` — reads ID3 tags via `mutagen` (title, artist, album, track number, year); falls back to filename parsing
+  - `infer_track_type(file_path)` — returns `"cortina"` if filename contains "Cortina", else `"tango"`
+  - `route_files(source_dir, raw_dir, cortinas_dir)` — copies files to correct destination based on `infer_track_type()`
+- Implement `AudioFeatures` dataclass in `atdj/audio/features.py`
+- Implement `extract_features(file_path, track_id)` using librosa:
+  - `librosa.beat.beat_track()` → bpm
+  - `librosa.feature.rms()` → energy
+  - `librosa.feature.spectral_centroid()` → brightness
+  - `librosa.feature.chroma_cqt()` → key (argmax of mean chroma)
+  - Composite danceability = 0.5 × rhythmic_regularity + 0.5 × energy_normalized
+- Implement `batch_extract()` with `joblib.Parallel`
+- Run `route_files()` to populate `data/raw/` and `data/cortinas/`
+- Run `batch_extract()` over all ~50 tango tracks in `data/raw/`; merge metadata + features into `data/catalog.csv`, replacing the dummy rows from WP-01
+
+---
+
+### WP-03: Static UI Wireframe
 **Deliverable:** Full Streamlit app with all pages, buttons, and interaction flows — no real backend, all responses are hardcoded stubs. Purpose: establish the visual and interaction design before any backend exists.
 
 **Est. Effort:** ~10 hrs (without AI: 2–3×) · Weeks 1–2 (3/22–4/4)
 
-**Depends on:** WP-01 (minimal — just folder structure and `uv sync`)
+**Depends on:** WP-01 (minimal — just folder structure)
 
 **Proof of Concept Test:** Run `streamlit run main.py` and manually click through every page and button. Confirm zero crashes, correct navigation, and all stubs respond visibly.
 
@@ -103,44 +138,22 @@
 
 ---
 
-### WP-03: Basic Playback Engine
+### WP-04: Basic Playback Engine
 **Deliverable:** Given a hardcoded ordered list of track file paths, the app plays them in sequence with Next/Skip controls.
 
 **Est. Effort:** ~6 hrs (without AI: 2–3×) · Week 2 (3/29–4/4)
 
 **Depends on:** WP-01
 
-**Proof of Concept Test** (`notebooks/03_playback_test.ipynb`): instantiate `PlaybackQueue` with 3 hardcoded file paths, call `next_track()` twice, assert current index and returned file path are correct at each step.
+**Proof of Concept Test** (`notebooks/04_playback_test.ipynb`): instantiate `PlaybackQueue` with 3 hardcoded file paths, call `next_track()` twice, assert current index and returned file path are correct at each step.
 
 **Detailed Tasks:**
 - Implement `atdj/playback/player.py`:
   - `PlaybackQueue` — ordered list of file paths + current index
   - `current_track()`, `next_track()`, `skip()` methods
-- Wire into `page_session.py` — replace the NOW PLAYING stub from WP-02 with a real `st.audio()` component driven by `PlaybackQueue`
-- Hardcoded test list: 3–5 real audio files from `data/tracks/`, fixed sequence, no agent planning yet
+- Wire into `page_session.py` — replace the NOW PLAYING stub from WP-03 with a real `st.audio()` component driven by `PlaybackQueue`
+- Hardcoded test list: 3–5 real audio files from `data/raw/`, fixed sequence, no agent planning yet
 - Persist `st.session_state.queue` across Streamlit reruns
-
----
-
-### WP-04: Audio Feature Extraction
-**Deliverable:** All tracks in catalog have `bpm, energy, key, danceability` populated
-
-**Est. Effort:** ~10 hrs (without AI: 2–3×) · Week 2 (3/29–4/4)
-
-**Depends on:** WP-01
-
-**Proof of Concept Test** (`notebooks/04_audio_features.ipynb`): run `extract_features()` on 3 sample tracks, print BPM/energy/key for each, plot a simple bar chart. Confirm values are in plausible ranges (BPM 50–200, energy 0–1) before running batch on full catalog.
-
-**Detailed Tasks:**
-- Implement `AudioFeatures` dataclass in `atdj/audio/features.py`
-- Implement `extract_features(file_path, track_id)` using librosa:
-  - `librosa.beat.beat_track()` → bpm
-  - `librosa.feature.rms()` → energy
-  - `librosa.feature.spectral_centroid()` → brightness
-  - `librosa.feature.chroma_cqt()` → key (argmax of mean chroma)
-  - Composite danceability = 0.5 × rhythmic_regularity + 0.5 × energy_normalized
-- Implement `batch_extract()` with `joblib.Parallel`
-- Run on all tracks with audio files; write results back to `catalog.csv`
 
 ---
 
@@ -149,7 +162,7 @@
 
 **Est. Effort:** ~10 hrs (without AI: 2–3×) · Week 2 (3/29–4/4)
 
-**Depends on:** WP-01, WP-04
+**Depends on:** WP-01, WP-02
 
 **Proof of Concept Test** (`notebooks/05_tanda_validator.ipynb`): manually build 3 valid and 2 invalid tandas using ~20 hardcoded track dicts, call `validate_tanda()` on each, confirm correct pass/fail. Then call `build_arc(10)` and `adjust_arc()`, plot the arc before and after adjustment.
 
@@ -160,7 +173,13 @@
 - Implement `atdj/tanda/energy.py`:
   - `build_arc(total_tandas)` → smooth energy curve (ramp 40% / peak 20% / wind-down 40%)
   - `adjust_arc(current_arc, from_pos, delta)` → smoothly shift remaining values
-- Write `tests/test_validator.py` — assert valid tandas pass, rule violations raise `ValueError`
+- Implement `atdj/planner/tanda_rules.py` — soft homogeneity checks for orchestra, singer, and decade (moved out of Pydantic schema intentionally):
+  - **convention mode**: treat violations as hard errors
+  - **flexible mode**: allow violations only if `Tanda.rationale` is non-empty
+- Write `tests/test_validator.py`:
+  - Valid tandas pass in both modes
+  - Mixed orchestra/singer/decade raises in convention mode, passes with rationale in flexible mode
+  - Style violations always raise (schema-level, not tested here)
 
 ---
 
@@ -169,7 +188,7 @@
 
 **Est. Effort:** ~18 hrs (without AI: 2–3×) · Week 3 (4/5–4/11)
 
-**Depends on:** WP-01, WP-04, WP-05
+**Depends on:** WP-01, WP-02, WP-05
 
 **Proof of Concept Test** (`notebooks/06_agent_prototype.ipynb`): invoke `build_graph()` with a 30-min session config (3 tandas), print the planned queue to stdout. No UI. Confirm the graph runs end-to-end, state transitions correctly, and the output is a valid 3-tanda sequence.
 
@@ -191,12 +210,18 @@
 
 **Depends on:** WP-01
 
-**Proof of Concept Test** (`notebooks/07_rag_prototype.ipynb`): ingest 10 tracks + 3 knowledge docs into a local ChromaDB instance, run 5 test questions, print retrieved chunks + LLM answer. Confirm retrieval is semantically relevant before wiring to agent tools.
+**Proof of Concept Test** (`notebooks/07_rag_prototype.ipynb`): ingest 10 tracks + 3 knowledge docs (1 fetched live, 2 from local failover) into a local ChromaDB instance, run 5 test questions, print retrieved chunks + LLM answer. Confirm retrieval is semantically relevant before wiring to agent tools.
+
+**Knowledge retrieval design:**
+- **Primary:** fetch domain knowledge at runtime from trusted web sources (Wikipedia, TodoTango.com) via a `fetch_knowledge()` function — always attempted first
+- **Failover:** if fetch fails or times out, fall back to curated `.md` files in `data/domain_knowledge/` (orchestra bios, era descriptions) — these are never the primary source, only the safety net
+- Fetched content is chunked and temporarily indexed into ChromaDB for the session; failover docs are pre-indexed at ingest time
 
 **Detailed Tasks:**
 - Implement `atdj/rag/store.py` — `get_client()`, `get_or_create_collection()`
 - Implement `atdj/rag/ingest.py` — `build_track_document()`, `ingest_catalog()`, `ingest_knowledge_docs()`
-- Add 5–10 curated knowledge `.md` files to `data/knowledge/` (orchestra bios, era descriptions)
+- Implement `atdj/rag/fetch.py` — `fetch_knowledge(query)`: attempts live web fetch (Wikipedia API / TodoTango), returns text; falls back to local `data/domain_knowledge/` `.md` files on failure
+- Add 3–5 failover `.md` files to `data/domain_knowledge/` covering the most common orchestras (Di Sarli, Troilo, D'Arienzo, Canaro, Pugliese)
 - Run full ingest; verify `tango_tracks` and `milonga_knowledge` collections populated
 - Implement `atdj/rag/query.py` — all three query functions
 
@@ -244,11 +269,11 @@
 
 **Depends on:** WP-02, WP-03, WP-06, WP-07 (core); WP-08, WP-09 (nice-to-have)
 
-**Proof of Concept Test:** Run the WP-02 static wireframe end-to-end before touching any real backend — confirm zero nav/state bugs as the baseline before integrating live functions.
+**Proof of Concept Test:** Run the WP-03 static wireframe end-to-end before touching any real backend — confirm zero nav/state bugs as the baseline before integrating live functions.
 
 **Detailed Tasks:**
-- Replace all WP-02 stubs with real function calls, one page at a time
-- `page_session.py`: wire to `build_graph().astream()` via `asyncio`; hook feedback buttons to `FeedbackEvent`; connect `PlaybackQueue` from WP-03
+- Replace all WP-03 stubs with real function calls, one page at a time
+- `page_session.py`: wire to `build_graph().astream()` via `asyncio`; hook feedback buttons to `FeedbackEvent`; connect `PlaybackQueue` from WP-04
 - `page_qa.py`: wire to `answer_question()` RAG tool
 - `page_catalog.py`: wire filters to real `catalog.csv` query + feature radar chart
 - `page_audio.py`: wire to `enhance_track()` + real before/after spectrograms
@@ -322,6 +347,22 @@
 - `streamlit run main.py` launches with no import errors
 - `pytest tests/` passes all tests (excluding tests that require audio files, which are gated by fixture existence)
 - `README.md` contains complete setup instructions a new user can follow without prior knowledge
+
+### Media Pool Setup (Offline Preprocessing Flow)
+
+Before launching the app, users must prepare their music pool. The expected flow is:
+
+1. **Place source audio** — copy your music folder into a local source directory (e.g. `~/Downloads/genai_dj_musics/`)
+2. **Run file routing** — execute `route_files()` from `atdj/audio/metadata.py`; this automatically sorts files into `data/raw/` (tango tracks) or `data/cortinas/` (any file with "Cortina" in the name, plus backup pool files). No manual sorting needed.
+3. **Run feature extraction** — execute `batch_extract()` to populate `bpm`, `energy`, `key`, and `danceability` into `catalog.csv`. Triggered via `notebooks/02_audio_features.ipynb` or a future CLI script.
+4. **Run RAG ingest** — execute `python -m atdj.rag.ingest` to index all tracks into ChromaDB
+5. **Launch the app** — `streamlit run main.py`
+
+Steps 2–4 only need to be re-run when new tracks are added. Metadata is always extracted from MP3 ID3 tags via `mutagen` — no manual spreadsheet editing required. This flow will be documented in `README.md` once all features and files are finalized.
+
+> **Stretch goal:** See `doc/ideas.md` — User Music Upload & On-the-Fly Feature Extraction collapses steps 1–4 into a single UI action at runtime.
+
+---
 
 ### Rubric Alignment
 
@@ -484,7 +525,7 @@
 
 ---
 
-> **`pyproject.toml` will be finalized in WP-01** once component choices are locked. The current `pyproject.toml` retains only the original dependencies until then.
+> **`pyproject.toml` dependencies will be added incrementally** as each WP is implemented and its requirements are confirmed. The current `pyproject.toml` retains only the original dependencies until then.
 
 ---
 
@@ -513,7 +554,8 @@ genai_atdj/
 │   │   └── feedback.py             # FeedbackEvent
 │   │
 │   ├── audio/                      # Audio processing subsystem
-│   │   ├── features.py             # AudioFeatures dataclass + extract_features()
+│   │   ├── metadata.py             # read_metadata(), infer_track_type(), route_files()
+│   │   ├── features.py             # AudioFeatures dataclass + extract_features() + batch_extract()
 │   │   ├── enhancement.py          # enhance_track() pipeline
 │   │   └── cortina.py              # select_cortina_from_pool(), generate_cortina_by_splice()
 │   │
@@ -547,7 +589,7 @@ genai_atdj/
 │   ├── raw/                        # Original audio files (.mp3/.flac)
 │   ├── processed/                  # Enhanced audio output
 │   ├── cortinas/                   # Curated + generated cortina clips
-│   ├── knowledge/                  # .md files: orchestra bios, era descriptions
+│   ├── domain_knowledge/           # failover .md files: orchestra bios, era descriptions (primary = runtime web fetch)
 │   ├── chroma_db/                  # Persisted ChromaDB on disk
 │   └── sessions/                   # Session summary .md files (generated)
 │
@@ -804,10 +846,10 @@ enhanced_file_path, embedding_id
 - Embedded text: `"{title}" by {orchestra} ({year}). Style: {style}. Singer: {singer}. Decade: {decade}s. Tags: {tags}. BPM: {bpm}. Key: {key}. Energy: {energy:.2f}.`
 - Metadata filter keys: `track_id, orchestra, style, decade, year, energy, bpm, has_audio`
 
-**`milonga_knowledge`** — curated domain knowledge
-- Orchestra biographies, era descriptions, dance etiquette guides
+**`milonga_knowledge`** — domain knowledge for Q&A enrichment
+- **Primary source:** fetched at runtime from Wikipedia / TodoTango.com via `atdj/rag/fetch.py`
+- **Failover source:** pre-indexed `.md` files in `data/domain_knowledge/` (used when fetch fails or times out)
 - 500-token chunks, 50-token overlap
-- Used for Q&A enrichment only
 
 ---
 
@@ -907,6 +949,11 @@ def skip_current_tanda(session_id: str) -> dict:
 ### Audio Processing Functions
 
 ```python
+# atdj/audio/metadata.py
+def read_metadata(file_path: str) -> dict: ...          # ID3 tags via mutagen, falls back to filename
+def infer_track_type(file_path: str) -> str: ...        # "cortina" | "tango"
+def route_files(source_dir: str, raw_dir: str, cortinas_dir: str) -> None: ...
+
 # atdj/audio/features.py
 def extract_features(file_path: str, track_id: str) -> AudioFeatures: ...
 def batch_extract(catalog_df, audio_dir: str, n_jobs: int = 4) -> list[AudioFeatures]: ...

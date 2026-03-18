@@ -11,3 +11,22 @@ wheels/
 
 # Secrets
 .env
+
+# Music & extracted data — never commit to GitHub
+# Folders are kept (via .gitkeep) so cloned repos have the full structure ready
+data/raw/*
+data/cortinas/*
+data/processed/*
+data/catalog.csv
+data/chroma_store/*
+data/domain_knowledge/*
+
+# Keep .gitkeep files so empty folders are tracked
+!data/raw/.gitkeep
+!data/cortinas/.gitkeep
+!data/processed/.gitkeep
+!data/chroma_store/.gitkeep
+!data/domain_knowledge/.gitkeep
+
+# Keep the samples folder fully tracked (5 demo tracks for README onboarding)
+!data/samples/

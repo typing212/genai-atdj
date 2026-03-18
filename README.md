@@ -1,133 +1,131 @@
 # AT-DJ: Agentic Tango DJ
 
-A LangGraph-based agentic system that acts as an intelligent DJ for Argentine Tango milongas. It plans valid tanda/cortina sequences, adapts dynamically to live feedback, enhances historical audio quality, and answers natural-language queries about the track catalog — all demonstrated through a live Streamlit interface.
+An AI-powered DJ system for Argentine Tango milongas. It plans tanda/cortina sequences, adapts to live feedback from the dance floor, and answers natural-language questions about the music — all through a Streamlit interface.
 
-> **Status:** Early development — implementation begins Week 1 (3/22/2026).
-
----
-
-## Project Structure
-
-```
-genai_atdj/
-├── atdj/               # Main package (agent, audio, RAG, UI, schemas)
-├── data/               # Catalog CSV, audio tracks, ChromaDB store
-├── notebooks/          # Proof-of-concept and exploration notebooks
-├── tests/              # Unit and integration tests
-├── doc/                # Blueprint, ideas, knowledge base, course materials
-├── main.py             # Entry point: streamlit run main.py
-├── pyproject.toml      # Dependencies managed with uv
-├── .env.example        # Environment variable template
-└── .claude/            # Claude Code configuration (see Developer Guide below)
-```
+> **Internal doc** — for teammates during development. A public-facing version will replace this after the project is complete.
 
 ---
 
-## Prerequisites
-
-- Python 3.13+
-- [uv](https://github.com/astral-sh/uv) (package manager)
-- ffmpeg (for audio processing)
-- An LLM API key — Google Gemini (default) or Anthropic Claude (fallback)
-
----
-
-## Setup
+## Quick Start
 
 ```bash
-# 1. Clone the repo
+# 1. Clone and install
 git clone <repo-url>
 cd genai_atdj
-
-# 2. Install dependencies
 uv sync
 
-# 3. Configure environment
+# 2. Set up environment
 cp .env.example .env
-# Fill in your API key(s) in .env
+# Open .env and fill in your API key(s)
 
-# 4. Run the app
-uv run streamlit run main.py
+# 3. Download music from the shared Google Drive and place files into:
+#    - data/raw/       ← tango tracks
+#    - data/cortinas/  ← cortina clips
+# https://drive.google.com/drive/folders/1B12Mn9hY1XV2Vutjd1TVMbfqQFrAtKqf?usp=sharing
+
+# 4. Run tests to confirm setup works
+uv run pytest tests/ -v
 ```
+
+> The app (`uv run streamlit run main.py`) won't do much yet — UI comes in WP-03/WP-10.
 
 ---
 
 ## Environment Variables
 
-See `.env.example` for all available variables. The key ones:
-
-| Variable | Description |
+| Variable | What it's for |
 |---|---|
 | `LLM_PROVIDER` | `gemini` (default) \| `claude` \| `ollama` |
 | `GOOGLE_API_KEY` | Required if using Gemini |
 | `ANTHROPIC_API_KEY` | Required if using Claude |
-| `GEMINI_MODEL` | Gemini model ID (default: `gemini-2.0-flash`) |
-| `CLAUDE_MODEL` | Claude model ID (default: `claude-sonnet-4-6`) |
+| `GEMINI_MODEL` | Default: `gemini-2.0-flash` |
+| `CLAUDE_MODEL` | Default: `claude-sonnet-4-6` |
 
-> Never commit `.env` — it is gitignored. Only `.env.example` is tracked.
-
----
-
-## Developer Guide: The `.claude/` Folder
-
-This project uses [Claude Code](https://claude.ai/claude-code) as an AI development assistant. The `.claude/` folder contains project-level configuration that **every team member's Claude Code session will automatically load**.
-
-### What's in `.claude/`
-
-```
-.claude/
-├── settings.json           # Project hooks (auto-loaded by Claude Code)
-├── hooks/
-│   └── check_env_access.py # Hook script: blocks .env reads
-└── commands/
-    ├── knowledge.md        # /knowledge slash command
-    └── idea.md             # /idea slash command
-```
+Never commit `.env` — it is gitignored. Only `.env.example` is tracked.
 
 ---
 
-### Hooks (`settings.json`)
+## Where to Find Things
 
-Hooks are shell commands that Claude Code runs automatically before or after certain actions. They fire **silently in the background** without any action needed from you.
-
-This project has two `PreToolUse` hooks (run *before* Claude uses a tool):
-
-#### 1. `.env` Access Guard
-- **Triggers on:** Any `Read` or `Grep` tool call
-- **What it does:** Blocks Claude from reading `.env` directly. `.env.example` is still accessible.
-- **Why:** Prevents accidental exposure of API keys in Claude's context or conversation logs.
-- **Script:** `.claude/hooks/check_env_access.py`
-
-#### 2. Duplicate Code Prevention
-- **Triggers on:** Any `Write` or `Edit` tool call
-- **What it does:** Before writing code, Claude checks whether the function, class, or logic being added already exists elsewhere in the project. If a duplicate is detected, the write is blocked and Claude explains what already exists and where.
-- **Why:** Keeps the codebase clean and avoids bugs from two versions of the same logic drifting apart.
+| Resource | Where |
+|---|---|
+| Full project spec & task breakdown | `doc/BLUEPRINT.md` |
+| Schema field reference | `atdj/schemas/README.md` |
+| Test descriptions | `tests/README.md` |
+| Design ideas & stretch goals | `doc/ideas.md` |
+| Research notes (libraries, design decisions) | `doc/knowledge/` |
 
 ---
 
-### Slash Commands
+## Current Status
 
-Custom commands available in any Claude Code session in this project. Type them in the Claude Code prompt.
+**Week 1 · WP-01 complete · WP-02 starting**
 
-#### `/knowledge <question>`
-Answers a question with focus on how it relates to AT-DJ, then saves a structured summary to `doc/knowledge/<topic>.md` for future reference. Use this when researching libraries, design patterns, or architecture decisions.
+| WP | Name | Status |
+|---|---|---|
+| WP-01 | Project Setup | Done |
+| WP-02 | Audio Feature Extraction & Catalog Bootstrap | Up next |
+| WP-03 | Static UI Wireframe | Up next |
+| WP-04 | Basic Playback Engine | Planned |
+| WP-05 | Tanda Validator & Energy Arc | Planned |
+| WP-06 | LangGraph Agent Core | Planned |
+| WP-07 | ChromaDB Ingest & RAG | Planned |
+| WP-08 | Audio Enhancement Pipeline | Planned |
+| WP-09 | Cortina Generation & Selection | Planned |
+| WP-10 | Full UI Integration | Planned |
+| WP-11 | Evaluation & Demo Prep | Planned |
 
-```
-/knowledge what is the difference between langgraph and langchain?
-```
-
-#### `/idea <description>`
-Records a feature idea or design proposal. Claude will first restate and clarify the idea, ask for your confirmation, then append it to `doc/ideas.md` in a structured format. Ideas are tracked as `- [ ]` (open) or `- [x]` (implemented).
-
-```
-/idea add an onboarding flow that plays 3 sample tracks to calibrate user preferences
-```
+Full timeline and task breakdown: `doc/BLUEPRINT.md`
 
 ---
 
-### Notes for teammates
+## What Was Built in WP-01
 
-- All hooks run via `uv run python` — no separate Python installation needed.
-- Do not commit real API keys. If you accidentally add them, rotate them immediately.
-- The `doc/ideas.md` and `doc/knowledge/` files are worth reading before starting a new work package — they capture design decisions and research done during planning.
-- `doc/blueprint.md` contains the full project specification: architecture, component breakdown, milestones, and technical decisions. Read it before starting any significant implementation work.
+The goal of WP-01 was to set up the shared foundation everyone else's code will build on — schemas, config, folder structure, and a test suite. No audio processing yet; just dummy data.
+
+**Schemas (`atdj/schemas/`)** — four Pydantic data models used across all modules:
+- `Track` — a single audio file (title, orchestra, style, year, extracted features)
+- `Tanda` — a group of 3–4 tracks played together; style must be homogeneous
+- `MilongaSession` — the full session state (queue, energy arc, planning mode)
+- `FeedbackEvent` — a real-time signal from a human operator during the milonga
+
+**Config (`atdj/config.py`)** — all file paths and LLM settings in one place; reads from `.env`
+
+**Catalog (`data/catalog.csv`)** — 5 dummy rows for testing; real rows added in WP-02
+
+**Tests (`tests/test_schemas.py`)** — 14 tests, all passing:
+```
+uv run pytest tests/ -v
+```
+
+**PoC notebook (`notebooks/01_project_setup.ipynb`)** — loads dummy catalog, instantiates schemas, verifies validation works end-to-end
+
+---
+
+## Using Claude Code (AI Dev Assistant — optional)
+
+Vanessa is using [Claude Code](https://claude.ai/claude-code) as an AI coding assistant. If you'd like to use it too, the `.claude/` folder has project-level config that loads automatically in every Claude Code session.
+
+**Two useful slash commands you can type in Claude Code:**
+
+`/knowledge <question>` — researches a topic and saves a summary to `doc/knowledge/`
+```
+/knowledge what is the difference between langgraph nodes and edges?
+```
+
+`/idea <description>` — logs a feature idea to `doc/ideas.md` after you confirm it
+```
+/idea add a page where the user can browse the music pool
+```
+
+**Hooks running in the background:**
+- Blocks Claude from reading `.env` directly (API key protection)
+- Asks for confirmation before Claude touches files outside this project folder
+
+---
+
+## Notes
+
+- Do not commit real API keys. If you accidentally push them, rotate them immediately.
+- `data/raw/`, `data/cortinas/`, and `data/catalog.csv` are gitignored — music files live locally only. Download the music from the [shared Google Drive](https://drive.google.com/drive/folders/1B12Mn9hY1XV2Vutjd1TVMbfqQFrAtKqf?usp=sharing) and place the tango tracks in `data/raw/` and cortinas in `data/cortinas/`.
+- Read `doc/BLUEPRINT.md` before starting a new work package — it has the full task list, dependencies, and PoC notebook specs for each WP.

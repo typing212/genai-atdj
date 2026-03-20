@@ -1,6 +1,3 @@
-def main():
-    print("Hello from genai-atdj!")
+from atdj.ui.app import run_app
 
-
-if __name__ == "__main__":
-    main()
+run_app()

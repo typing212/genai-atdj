@@ -41,7 +41,7 @@
 | WP-06 | LangGraph Agent Core | WP-01, WP-02, WP-05 |
 | WP-07 | ChromaDB Ingest & RAG | WP-01 |
 | WP-08 | Audio Enhancement Pipeline | WP-01 |
-| WP-09 | Cortina Generation & Selection | WP-01 |
+| WP-09 | Cortina Generation & Selection (generation prioritized) | WP-01 |
 | WP-10 | Full UI Integration | WP-03, WP-04, WP-06, WP-07 (core); WP-08, WP-09 (nice-to-have) |
 | WP-11 | Evaluation & Demo Prep | WP-10 |
 
@@ -88,31 +88,22 @@
 
 **Depends on:** WP-01
 
-**Proof of Concept Test** (`notebooks/02_audio_features.ipynb`): run `read_metadata()` + `extract_features()` on 3 sample tracks from `data/raw/`, print all fields, plot a BPM/energy bar chart. Confirm metadata fields are populated and feature values are in plausible ranges (BPM 50–200, energy 0–1) before running batch.
+**Proof of Concept Test** (`notebooks/02_audio_features.ipynb`): implement and run `read_metadata()` (via `mutagen` ID3 tags) + `extract_features()` (via librosa) on 3 sample tracks, print all fields, plot a BPM/energy bar chart. Confirm feature values are in plausible ranges (BPM 50–200, energy 0–1) before running batch. Validated code is then moved into `atdj/audio/metadata.py` and `atdj/audio/features.py`.
 
-**Source music:** "La Fiesta De Buenos Aires" CD series (40 volumes, ~29 tracks/volume). For WP-02 PoC and catalog bootstrap, use the first ~50 tango tracks (roughly Vol-01 and Vol-02). All volumes are processed in the full batch run.
+**Music pool:** "La Fiesta De Buenos Aires" CD series (~40 volumes). Files with "Cortina" in the filename route to `data/cortinas/` (backup pool); all others route to `data/raw/`. All cortinas are treated equally regardless of source. Metadata is extracted from MP3 ID3 tags via `mutagen`; falls back to filename parsing if tags are missing.
 
-**Audio file routing (automated, no manual sorting):**
-- Filename contains `"Cortina"` (case-insensitive) → `data/cortinas/` tagged `source: milonga_sequence`
-- All other tracks → `data/raw/` (tango catalog)
-- Backup pop cortinas (from separate `Cortina/` source folder) → `data/cortinas/` tagged `source: backup_pool`
-
-**Metadata strategy:** Extract from MP3 ID3 tags using `mutagen`; fall back to filename parsing if tags are missing. The original Excel sequence reference may be consulted manually but the code must never depend on it.
+**Feature extraction approach:** Explore both **librosa** and **essentia** in the PoC notebook before committing to either. Do not lock in which features to keep — feature selection is deferred until the agent feedback loop (WP-05/06) reveals which acoustic descriptors are actually useful for AI-driven tanda planning. The notebook is exploration-first; production code follows only after findings are validated.
 
 **Detailed Tasks:**
 - Implement `atdj/audio/metadata.py`:
   - `read_metadata(file_path)` — reads ID3 tags via `mutagen` (title, artist, album, track number, year); falls back to filename parsing
   - `infer_track_type(file_path)` — returns `"cortina"` if filename contains "Cortina", else `"tango"`
   - `route_files(source_dir, raw_dir, cortinas_dir)` — copies files to correct destination based on `infer_track_type()`
-- Implement `AudioFeatures` dataclass in `atdj/audio/features.py`
-- Implement `extract_features(file_path, track_id)` using librosa:
-  - `librosa.beat.beat_track()` → bpm
-  - `librosa.feature.rms()` → energy
-  - `librosa.feature.spectral_centroid()` → brightness
-  - `librosa.feature.chroma_cqt()` → key (argmax of mean chroma)
-  - Composite danceability = 0.5 × rhythmic_regularity + 0.5 × energy_normalized
+- Implement `AudioFeatures` dataclass in `atdj/audio/features.py` (fields finalised after PoC exploration)
+- Implement `extract_features(file_path, track_id)` — library and final feature set decided after PoC; candidates:
+  - **librosa:** `beat.beat_track()` → bpm, `feature.rms()` → energy, `feature.spectral_centroid()` → brightness, `feature.chroma_cqt()` → key
+  - **essentia:** `RhythmExtractor2013` → bpm/beats, `Energy` → energy, `KeyExtractor` → key/scale, `Danceability` → danceability
 - Implement `batch_extract()` with `joblib.Parallel`
-- Run `route_files()` to populate `data/raw/` and `data/cortinas/`
 - Run `batch_extract()` over all ~50 tango tracks in `data/raw/`; merge metadata + features into `data/catalog.csv`, replacing the dummy rows from WP-01
 
 ---
@@ -135,6 +126,10 @@
 - `page_settings.py`: provider selector, API key input, save button (`st.session_state` only)
 - Every button must respond (toast, state change, or nav) — no dead UI
 - Update `main.py` to call `atdj/ui/app.py`
+
+**UI design principle:** Minimal and elegant — Notion/Claude-inspired. No redundant elements,
+generous whitespace, one accent color (`#8B1A1A`, deep burgundy), card layouts with
+`1px #EBEBEB` borders, system-ui font stack. Hide all Streamlit chrome decorations.
 
 ---
 
@@ -245,19 +240,22 @@
 ---
 
 ### WP-09: Cortina Generation & Selection
-**Deliverable:** `select_cortina` tool integrated with `cortina_selector` agent node
+**Deliverable:** `generate_cortina` and `select_cortina` tools integrated with `cortina_selector` agent node
 
 **Est. Effort:** ~8 hrs (without AI: 2–3×) · Week 4 (4/12–4/18)
 
 **Depends on:** WP-01
 
-**Proof of Concept Test** (`notebooks/09_cortina_generation.ipynb`): call `select_cortina_from_pool()` after a hardcoded Vals tanda, print contrast scores for each candidate, play the top-scored cortina with `IPython.display.Audio`. Confirm the selection logic prefers contrasting clips.
+**Cortina pool design:**
+- **Backup pool (what we have):** all pre-existing music in `data/cortinas/` — files labeled "Cortina" in the filename and non-tango pop/jazz clips are all treated equally as backup cortinas
+- **Planned (WP-09):** purpose-built generated transition music — short neutral clips designed for milonga use; not yet available, will supplement the backup pool once implemented
+
+**Proof of Concept Test** (`notebooks/09_cortina_selection.ipynb`): call `select_cortina_from_pool()` after a hardcoded Vals tanda, print contrast scores for each candidate, play the top-scored cortina with `IPython.display.Audio`. Confirm the selection logic prefers contrasting clips.
 
 **Detailed Tasks:**
-- Curate 10–15 non-tango clips (jazz, classical, ≥30s each) in `data/cortinas/raw/`
 - Implement `atdj/audio/cortina.py`:
-  - `select_cortina_from_pool()` — score by energy contrast + spectral contrast, trim with pydub
-  - `generate_cortina_by_splice()` — random 2–3 clip splice with 500ms crossfade
+  - `select_cortina_from_pool()` — score clips in `data/cortinas/` by energy contrast + spectral contrast vs. preceding tanda, trim to 20–30s with pydub
+  - `generate_cortina_by_splice()` — splice 2–3 non-tango clips with 500ms crossfade to produce a fresh transition clip
 - Wire `select_cortina` and `generate_cortina` tools in `atdj/agent/tools.py`
 
 ---
@@ -588,7 +586,7 @@ genai_atdj/
 │   ├── catalog.csv                 # Master track metadata + extracted features
 │   ├── raw/                        # Original audio files (.mp3/.flac)
 │   ├── processed/                  # Enhanced audio output
-│   ├── cortinas/                   # Curated + generated cortina clips
+│   ├── cortinas/                   # Backup cortina pool (labeled + pop/jazz clips)
 │   ├── domain_knowledge/           # failover .md files: orchestra bios, era descriptions (primary = runtime web fetch)
 │   ├── chroma_db/                  # Persisted ChromaDB on disk
 │   └── sessions/                   # Session summary .md files (generated)

@@ -30,3 +30,10 @@ data/domain_knowledge/*
 
 # Keep the samples folder fully tracked (5 demo tracks for README onboarding)
 !data/samples/
+
+# UI screenshots — local dev only, not needed on GitHub
+atdj/ui/screenshots/
+*.png
+
+# Playwright MCP console logs — local dev only
+.playwright-mcp/

@@ -27,7 +27,7 @@ cp .env.example .env
 uv run pytest tests/ -v
 ```
 
-> The app (`uv run streamlit run main.py`) won't do much yet — UI comes in WP-03/WP-10.
+> Run the UI: `uv run streamlit run main.py` — first version of the DJ Console is live (WP-03).
 
 ---
 
@@ -59,13 +59,13 @@ Never commit `.env` — it is gitignored. Only `.env.example` is tracked.
 
 ## Current Status
 
-**Week 1 · WP-01 complete · WP-02 starting**
+**WP-01 complete · WP-03 first version complete · WP-02 in progress**
 
 | WP | Name | Status |
 |---|---|---|
 | WP-01 | Project Setup | Done |
-| WP-02 | Audio Feature Extraction & Catalog Bootstrap | Up next |
-| WP-03 | Static UI Wireframe | Up next |
+| WP-02 | Audio Feature Extraction & Catalog Bootstrap | In progress |
+| WP-03 | Static UI Wireframe | First version done |
 | WP-04 | Basic Playback Engine | Planned |
 | WP-05 | Tanda Validator & Energy Arc | Planned |
 | WP-06 | LangGraph Agent Core | Planned |
@@ -102,6 +102,21 @@ uv run pytest tests/ -v
 
 ---
 
+## What Was Built in WP-03
+
+The goal of WP-03 was a fully laid-out static UI — no live agent logic yet, but all panels wired up with realistic stub data so the rest of the team can see the target interface.
+
+**DJ Console (`atdj/ui/page_main.py`)** — single-page Streamlit app with three rows:
+
+- **Now Playing / Playback / Energy Arc**: live track card (orchestra, singer, decade), transport controls, volume + gap settings, and an Altair energy-arc chart showing the planned session arc
+- **Agent Chat / Session Log**: \an agent chat panel with style/mode selectors, and a timestamped session log
+- **Full Playlist**: scrollable tanda/cortina queue with reorder (↑ ↓) and remove (×) controls; active track highlighted
+- **Search Music / Upload**: search box to find and queue tracks, file uploader for new audio
+
+Design tokens (colors, badge styles, fonts) are in `atdj/ui/DESIGN_SYSTEM.md`.
+
+---
+
 ## Using Claude Code (AI Dev Assistant — optional)
 
 Vanessa is using [Claude Code](https://claude.ai/claude-code) as an AI coding assistant. If you'd like to use it too, the `.claude/` folder has project-level config that loads automatically in every Claude Code session.
@@ -129,3 +144,4 @@ Vanessa is using [Claude Code](https://claude.ai/claude-code) as an AI coding as
 - Do not commit real API keys. If you accidentally push them, rotate them immediately.
 - `data/raw/`, `data/cortinas/`, and `data/catalog.csv` are gitignored — music files live locally only. Download the music from the [shared Google Drive](https://drive.google.com/drive/folders/1B12Mn9hY1XV2Vutjd1TVMbfqQFrAtKqf?usp=sharing) and place the tango tracks in `data/raw/` and cortinas in `data/cortinas/`.
 - Read `doc/BLUEPRINT.md` before starting a new work package — it has the full task list, dependencies, and PoC notebook specs for each WP.
+- **Mac/Linux teammates:** `notebooks/02_audio_features.ipynb` has an essentia section (Section 3) that is skipped on Windows. Install essentia (`uv add essentia`) and run those cells — compare BPM, key, and danceability results with the librosa cells above and add your observations to the notebook.

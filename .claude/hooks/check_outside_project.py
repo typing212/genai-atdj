@@ -5,6 +5,7 @@ Forces 'ask' permission even when auto/bypass mode is active.
 import json
 import sys
 import os
+import shlex
 
 
 PROJECT_DIR = r"C:\Users\Vanessa\Desktop\Columbia\Spring 26\GenAI\Project\genai_atdj"
@@ -34,15 +35,12 @@ def main():
         if not command:
             sys.exit(0)
         # Extract any tokens that look like absolute paths
-        tokens = command.split()
+        tokens = shlex.split(command)
         candidates = [
             t for t in tokens
             if t.startswith("/") or (len(t) > 2 and t[1] == ":")
         ]
-        file_path = next(
-            (t for t in candidates if normalize(t) != normalize(t) and True), ""
-        )
-        # Simpler: flag if any candidate is outside project
+        # Flag if any candidate is outside project
         outside = [
             t for t in candidates
             if not normalize(t).startswith(normalize(PROJECT_DIR))
@@ -61,6 +59,7 @@ def main():
             print(json.dumps(result))
         sys.exit(0)
 
+    file_path = os.path.abspath(file_path)
     norm_file = normalize(file_path)
     norm_project = normalize(PROJECT_DIR)
 

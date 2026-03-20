@@ -1,0 +1,33 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__playwright",
+      "Bash(mkdir -p atdj/schemas atdj/audio atdj/playback atdj/tanda atdj/rag atdj/ui tests notebooks)",
+      "Bash(touch atdj/__init__.py atdj/schemas/__init__.py atdj/audio/__init__.py atdj/playback/__init__.py atdj/tanda/__init__.py atdj/rag/__init__.py atdj/ui/__init__.py)",
+      "Bash(cp \"/c/Users/Vanessa/Downloads/genai_dj_musics/Tango/La Fiesta De Buenos Aires_MP3/Vol-01 La Fiesta De Buenos Aires/01 El Retirado.mp3\" \"/c/Users/Vanessa/Desktop/Columbia/Spring 26/GenAI/Project/genai_atdj/data/samples/01 El Retirado.mp3\")",
+      "Bash(cp \"/c/Users/Vanessa/Downloads/genai_dj_musics/Tango/La Fiesta De Buenos Aires_MP3/Vol-01 La Fiesta De Buenos Aires/04 Nobleza De Arrabal.mp3\" \"/c/Users/Vanessa/Desktop/Columbia/Spring 26/GenAI/Project/genai_atdj/data/samples/04 Nobleza De Arrabal.mp3\")",
+      "Bash(cp \"/c/Users/Vanessa/Downloads/genai_dj_musics/Tango/La Fiesta De Buenos Aires_MP3/Vol-01 La Fiesta De Buenos Aires/29 Milongon.mp3\" \"/c/Users/Vanessa/Desktop/Columbia/Spring 26/GenAI/Project/genai_atdj/data/samples/29 Milongon.mp3\")",
+      "Bash(cp \"/c/Users/Vanessa/Downloads/genai_dj_musics/Tango/La Fiesta De Buenos Aires_MP3/Vol-01 La Fiesta De Buenos Aires/05 Dixieland Cortina.mp3\" \"/c/Users/Vanessa/Desktop/Columbia/Spring 26/GenAI/Project/genai_atdj/data/samples/05 Dixieland Cortina.mp3\")",
+      "Bash(cp \"/c/Users/Vanessa/Downloads/genai_dj_musics/Cortina/01 - Sucker.mp3\" \"/c/Users/Vanessa/Desktop/Columbia/Spring 26/GenAI/Project/genai_atdj/data/samples/Sucker \\(Backup Cortina\\).mp3\")",
+      "Bash(uv sync:*)",
+      "Bash(uv run:*)",
+      "mcp__plywright__browser_navigate",
+      "mcp__plywright__browser_take_screenshot",
+      "mcp__plywright__browser_evaluate",
+      "mcp__plywright__browser_wait_for",
+      "mcp__plywright__browser_press_key",
+      "Bash(python -c \"import ast; ast.parse\\(open\\(''atdj/ui/page_main.py'', encoding=''utf-8''\\).read\\(\\)\\); print\\(''Syntax OK''\\)\")",
+      "Bash(python:*)",
+      "Bash(echo \"exit: $?\")",
+      "mcp__plywright__browser_click",
+      "Bash(cp \".playwright-mcp/page-2026-03-18T21-23-38-589Z.png\" \"atdj/ui/screenshots/mcp_page_2026-03-18.png\")",
+      "Bash(cp \".playwright-mcp/page-2026-03-19T20-41-34-823Z.png\" \"atdj/ui/screenshots/mcp_page_2026-03-19a.png\")",
+      "Bash(cp \".playwright-mcp/page-2026-03-19T20-50-54-854Z.png\" \"atdj/ui/screenshots/mcp_page_2026-03-19b.png\")",
+      "mcp__plywright__browser_snapshot",
+      "Bash(python3 -m pip list)",
+      "mcp__plywright__browser_run_code",
+      "Bash(uv pip:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}

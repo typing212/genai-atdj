@@ -36,6 +36,10 @@ Ideas recorded during development. Unchecked = not yet implemented. Checked = do
   - *Summary:* Add new `event_type` values to `FeedbackEvent` as real milonga testing reveals signal types not yet covered.
   - *Clarification:* The current `Literal[...]` list in `atdj/schemas/feedback.py` has 9 fixed values. New human signal types may emerge during testing that require expansion. Any new `event_type` must be added to both the schema and `tests/test_schemas.py`, and the agent routing logic (WP-06) must handle it — schema and agent changes should go together.
 
+- [ ] **Separate Cortina & Tango Music Handling in UI**
+  - *Summary:* Ask users to organize cortina and tango files separately, with distinct upload/import flows for each type.
+  - *Clarification:* Currently both tango tracks and cortinas go through the same metadata/feature extraction pipeline, but cortinas have many null metadata fields by nature (no orchestra, singer, year, etc.). A cleaner approach: have the UI explicitly ask users to handle cortina and tango imports separately — tango tracks through the full metadata pipeline, cortinas through a simplified flow that only extracts audio features and auto-sets style to "cortina". This would make the catalog cleaner and reduce confusion about null fields.
+
 - [ ] **Media Pool Browser Page**
   - *Summary:* A Streamlit page where the user can browse the music pool as a filterable table showing only human-readable columns.
   - *Clarification:* A new page (`page_media_pool.py`) in the Streamlit UI (WP-10) that reads `catalog.csv` and displays a filtered view with only user-facing columns: title, orchestra, singer, style, year, decade, and duration. Technical extraction fields (bpm, energy, key, danceability, brightness, snr_estimate_db, embedding_id, etc.) are hidden. The table should be filterable by orchestra, style, and decade at minimum. Read-only — no editing. Depends on WP-02 (catalog must be populated with real data first).

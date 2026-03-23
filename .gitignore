@@ -25,6 +25,7 @@ data/domain_knowledge/*
 !data/raw/.gitkeep
 !data/cortinas/.gitkeep
 !data/processed/.gitkeep
+!data/processed/todotango_enriched.csv
 !data/chroma_store/.gitkeep
 !data/domain_knowledge/.gitkeep
 
@@ -37,3 +38,6 @@ atdj/ui/screenshots/
 
 # Playwright MCP console logs — local dev only
 .playwright-mcp/
+
+# AudioSep for exploration
+vendor/AudioSep

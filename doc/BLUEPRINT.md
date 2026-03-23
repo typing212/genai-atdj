@@ -82,30 +82,39 @@
 ---
 
 ### WP-02: Audio Feature Extraction & Catalog Bootstrap
-**Deliverable:** `atdj/audio/features.py` and `atdj/audio/metadata.py` modules complete; `catalog.csv` fully populated with real metadata and extracted features for ~50 tango tracks; cortinas routed to `data/cortinas/`
 
-**Est. Effort:** ~10 hrs (without AI: 2–3×) · Week 1 (3/22–3/28)
+**Deliverable:** `catalog.csv` fully populated with real metadata and extracted features for ~950 tracks (tango + cortinas), with missing style/decade backfilled from TodoTango enrichment data; `atdj/audio/features.py` and `atdj/audio/metadata.py` production modules complete and populated with validated extraction logic.
+
+**Est. Effort:** ~10 hrs (without AI: 2–3x) · Week 1 (3/22–3/28)
 
 **Depends on:** WP-01
 
-**Proof of Concept Test** (`notebooks/02_audio_features.ipynb`): implement and run `read_metadata()` (via `mutagen` ID3 tags) + `extract_features()` (via librosa) on 3 sample tracks, print all fields, plot a BPM/energy bar chart. Confirm feature values are in plausible ranges (BPM 50–200, energy 0–1) before running batch. Validated code is then moved into `atdj/audio/metadata.py` and `atdj/audio/features.py`.
+**Music pool:** "La Fiesta De Buenos Aires" CD series (~40 volumes). Users manually organize tango tracks into `data/raw/` and cortinas into `data/cortinas/`.
 
-**Music pool:** "La Fiesta De Buenos Aires" CD series (~40 volumes). Files with "Cortina" in the filename route to `data/cortinas/` (backup pool); all others route to `data/raw/`. All cortinas are treated equally regardless of source. Metadata is extracted from MP3 ID3 tags via `mutagen`; falls back to filename parsing if tags are missing.
+**Two phases of work:**
+
+1. **End-to-End Bootstrap (notebooks/02_audio_features.ipynb)** — The entire initial catalog generation happens here. 
+    * **PoC exploration:** Write `read_metadata()` and `extract_features()` (comparing librosa vs essentia) on 3 sample tracks in `data/samples/`. 
+    * **Batch generation:** Run a parallelized extraction (`joblib.Parallel`) over all tracks in `data/raw/` and `data/cortinas/` directly within the notebook to build the base dataframe. Cortina tracks get style auto-set to `"cortina"`.
+    * **One-time batch fix:** Merge the base dataframe with `todotango_enriched.csv` to backfill missing `genre`, `style`, `recording_year`, and `decade` data for the ~950 tracks. Export the final, clean result as `data/catalog.csv`.
+
+2. **Productionization (atdj/audio/ modules)** — Once the notebook proves the logic works across the whole dataset, extract the reusable "formulas" into production code so future music additions use the exact same logic.
+    * `atdj/audio/metadata.py`: Move the validated `read_metadata(file_path)` function here. 
+    * `atdj/audio/features.py`: Move the `AudioFeatures` dataclass, `extract_features()`, and a reusable `batch_extract()` wrapper here. Add basic unit tests to ensure the extraction logic remains stable.
+
+**Cortina handling:** Cortinas also go through feature extraction, but many metadata columns (orchestra, singer, year, etc.) will naturally be null. Style is auto-set to `"cortina"` based on folder location, not filename heuristics.
 
 **Feature extraction approach:** Explore both **librosa** and **essentia** in the PoC notebook before committing to either. Do not lock in which features to keep — feature selection is deferred until the agent feedback loop (WP-05/06) reveals which acoustic descriptors are actually useful for AI-driven tanda planning. The notebook is exploration-first; production code follows only after findings are validated.
 
 **Detailed Tasks:**
-- Implement `atdj/audio/metadata.py`:
-  - `read_metadata(file_path)` — reads ID3 tags via `mutagen` (title, artist, album, track number, year); falls back to filename parsing
-  - `infer_track_type(file_path)` — returns `"cortina"` if filename contains "Cortina", else `"tango"`
-  - `route_files(source_dir, raw_dir, cortinas_dir)` — copies files to correct destination based on `infer_track_type()`
-- Implement `AudioFeatures` dataclass in `atdj/audio/features.py` (fields finalised after PoC exploration)
-- Implement `extract_features(file_path, track_id)` — library and final feature set decided after PoC; candidates:
-  - **librosa:** `beat.beat_track()` → bpm, `feature.rms()` → energy, `feature.spectral_centroid()` → brightness, `feature.chroma_cqt()` → key
-  - **essentia:** `RhythmExtractor2013` → bpm/beats, `Energy` → energy, `KeyExtractor` → key/scale, `Danceability` → danceability
-- Implement `batch_extract()` with `joblib.Parallel`
-- Run `batch_extract()` over all ~50 tango tracks in `data/raw/`; merge metadata + features into `data/catalog.csv`, replacing the dummy rows from WP-01
 
+* Run PoC exploration in notebook: validate metadata/feature extraction on 3 sample tracks.
+* Scale up in notebook: run extraction logic over all ~950 tracks to generate the base dataframe.
+* Run one-time TodoTango backfill in notebook: merge in missing style/decade data.
+* Export finalized `catalog.csv` from the notebook.
+* Port proven logic to `atdj/audio/metadata.py` — `read_metadata()`.
+* Port proven logic to `atdj/audio/features.py` — `AudioFeatures`, `extract_features()`, and `batch_extract()`.
+* (Optional) Write quick sanity-check tests for the production modules.
 ---
 
 ### WP-03: Static UI Wireframe
@@ -350,13 +359,12 @@ generous whitespace, one accent color (`#8B1A1A`, deep burgundy), card layouts w
 
 Before launching the app, users must prepare their music pool. The expected flow is:
 
-1. **Place source audio** — copy your music folder into a local source directory (e.g. `~/Downloads/genai_dj_musics/`)
-2. **Run file routing** — execute `route_files()` from `atdj/audio/metadata.py`; this automatically sorts files into `data/raw/` (tango tracks) or `data/cortinas/` (any file with "Cortina" in the name, plus backup pool files). No manual sorting needed.
-3. **Run feature extraction** — execute `batch_extract()` to populate `bpm`, `energy`, `key`, and `danceability` into `catalog.csv`. Triggered via `notebooks/02_audio_features.ipynb` or a future CLI script.
-4. **Run RAG ingest** — execute `python -m atdj.rag.ingest` to index all tracks into ChromaDB
-5. **Launch the app** — `streamlit run main.py`
+1. **Place source audio** — manually organize tango tracks into `data/raw/` and cortinas into `data/cortinas/`
+2. **Run feature extraction** — execute `batch_extract()` to populate `bpm`, `energy`, `key`, and `danceability` into `catalog.csv`. Triggered via `notebooks/02_audio_features.ipynb` or a future CLI script.
+3. **Run RAG ingest** — execute `python -m atdj.rag.ingest` to index all tracks into ChromaDB
+4. **Launch the app** — `streamlit run main.py`
 
-Steps 2–4 only need to be re-run when new tracks are added. Metadata is always extracted from MP3 ID3 tags via `mutagen` — no manual spreadsheet editing required. This flow will be documented in `README.md` once all features and files are finalized.
+Steps 1–3 only need to be re-run when new tracks are added. Metadata is always extracted from MP3 ID3 tags via `mutagen` — no manual spreadsheet editing required. This flow will be documented in `README.md` once all features and files are finalized.
 
 > **Stretch goal:** See `doc/ideas.md` — User Music Upload & On-the-Fly Feature Extraction collapses steps 1–4 into a single UI action at runtime.
 
@@ -552,7 +560,7 @@ genai_atdj/
 │   │   └── feedback.py             # FeedbackEvent
 │   │
 │   ├── audio/                      # Audio processing subsystem
-│   │   ├── metadata.py             # read_metadata(), infer_track_type(), route_files()
+│   │   ├── metadata.py             # read_metadata()
 │   │   ├── features.py             # AudioFeatures dataclass + extract_features() + batch_extract()
 │   │   ├── enhancement.py          # enhance_track() pipeline
 │   │   └── cortina.py              # select_cortina_from_pool(), generate_cortina_by_splice()
@@ -948,9 +956,7 @@ def skip_current_tanda(session_id: str) -> dict:
 
 ```python
 # atdj/audio/metadata.py
-def read_metadata(file_path: str) -> dict: ...          # ID3 tags via mutagen, falls back to filename
-def infer_track_type(file_path: str) -> str: ...        # "cortina" | "tango"
-def route_files(source_dir: str, raw_dir: str, cortinas_dir: str) -> None: ...
+def read_metadata(file_path: str) -> dict: ...          # ID3 tags via mutagen; missing fields left empty
 
 # atdj/audio/features.py
 def extract_features(file_path: str, track_id: str) -> AudioFeatures: ...

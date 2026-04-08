@@ -1,0 +1,6 @@
+id,title,orchestra,singer,style,year,decade,duration_seconds,file_path,tags,notes,bpm,key,energy,danceability,brightness,snr_estimate_db,enhanced_file_path,embedding_id
+dummy_001,El Retirado,Di Sarli,,tango,1942,1940,180.0,data/raw/dummy_001.mp3,[],,,,,,,,,
+dummy_002,La Cumparsita,Rodriguez,,tango,1944,1940,195.0,data/raw/dummy_002.mp3,[],,,,,,,,,
+dummy_003,Desde El Alma,Canaro,,vals,1940,1940,210.0,data/raw/dummy_003.mp3,[],,,,,,,,,
+dummy_004,Milongueando En El 40,Troilo,,milonga,1941,1940,175.0,data/raw/dummy_004.mp3,[],,,,,,,,,
+dummy_005,Cortina Sample,,,,1950,1950,25.0,data/cortinas/dummy_005.mp3,[],cortina placeholder,,,,,,,

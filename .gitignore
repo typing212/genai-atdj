@@ -39,5 +39,8 @@ atdj/ui/screenshots/
 # Playwright MCP console logs — local dev only
 .playwright-mcp/
 
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json
+
 # AudioSep for exploration
 vendor/AudioSep

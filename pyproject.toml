@@ -26,6 +26,9 @@ dependencies = [
     # WP-03
     "streamlit>=1.32",
     "pip>=26.0.1",
+    "google-genai>=1.70.0",
+    "sentence-transformers>=5.3.0",
+    "torchvision>=0.26.0",
 ]
 
 [tool.uv]

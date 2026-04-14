@@ -44,3 +44,6 @@ atdj/ui/screenshots/
 
 # AudioSep for exploration
 vendor/AudioSep
+
+# Don't track ai_usage for now
+doc/ai_usage.md

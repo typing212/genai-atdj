@@ -240,11 +240,52 @@ generous whitespace, one accent color (`#8B1A1A`, deep burgundy), card layouts w
 
 **Proof of Concept Test** (`notebooks/08_enhancement_test.ipynb`): run the full pipeline on 1 track, plot before/after mel spectrograms side-by-side using matplotlib, play both with `IPython.display.Audio`. Confirm audible improvement and no clipping before running on all 10.
 
+**Pipeline Explained:**
+
+| Stage | What it does | Why we need it | Library | Key parameter |
+|---|---|---|---|---|
+| 1. **Read** | Load audio file (MP3/WAV) as a numpy array | Entry point — converts file to samples we can process | `librosa.load()` | `sr=None` (keep native sample rate) |
+| 2. **Noise reduction** | Reduce constant background noise (tape hiss, electrical hum) using spectral gating — estimates the noise profile from quiet parts, then subtracts it from the full signal | Old recordings (1930s-60s) have audible tape hiss that distracts from the music | `noisereduce` | `prop_decrease` — **adaptive per-track** (0.2–0.8), scaled by track SNR vs tanda median |
+| 3. **EQ (equalization)** | Adjusts the volume of specific frequency bands — boosts bandoneón body (800Hz), brings out vocal presence (2kHz), removes low rumble (<80Hz) | Old recordings can sound muddy or thin; subtle EQ restores warmth and clarity without changing the character | `pedalboard` (HighpassFilter, LowShelfFilter, PeakFilter) | `eq_low_gain` and `eq_vocal_gain` — **adaptive per-track** (0.0–3.5 dB), based on spectral centroid vs tanda median |
+| 4. **LUFS normalization** | Adjusts overall volume so all tracks have the same perceived loudness (-14 LUFS) | Different recordings from different eras/labels have wildly different volumes; normalizing means the DJ doesn't need to adjust volume between tracks in a tanda | `pyloudnorm` | `target_lufs=-14.0` (streaming standard) |
+| 5. **Limiter** | Catches any peaks that would exceed -1 dBFS and squashes them down | LUFS normalization can boost the signal enough to cause clipping; the limiter runs AFTER normalization to catch those peaks | `pedalboard.Limiter` | `threshold_db=-1.0` (only catches peaks, doesn't compress) |
+| 6. **Dynamic hiss filter** | Low-pass filter with per-track cutoff frequency, determined by `find_music_cutoff()` which analyzes where musical energy drops off. 3x stacked for steep rolloff | Runs last because LUFS normalization can amplify tiny noise-reduction artifacts above the music range; the dynamic cutoff adapts to each track (older recordings get a lower cutoff, cleaner recordings keep more highs) | `pedalboard.LowpassFilter` ×3 | `cutoff_hz` — **adaptive per-track** (min 5kHz), set where music energy drops below -40dB of peak |
+| 7. **Write** | Save the enhanced audio as a WAV file | Output to `data/processed/` for playback | `soundfile.write()` | WAV format (lossless) |
+
+**Fixed vs Adaptive Parameters:**
+
+The pipeline uses two kinds of parameters. Fixed parameters are based on physics or playback standards — they never change. Adaptive parameters are computed per-track based on how the track compares to the other tracks in its tanda, so the group sounds more consistent while preserving each tanda's unique character.
+
+| Parameter | Fixed or Adaptive | Value / Range | Basis |
+|---|---|---|---|
+| `highpass_hz` | Fixed | 80 Hz | Physics — rumble below 80Hz is always unwanted |
+| `target_lufs` | Fixed | -14.0 LUFS | Playback standard for consistent volume |
+| `limiter_threshold` | Fixed | -1.0 dBFS | Digital ceiling — prevents clipping distortion |
+| `noise_prop` | **Adaptive** | 0.2 – 0.8 | Scaled by track SNR vs tanda median SNR. Noisier tracks get more reduction |
+| `eq_low_gain` (800Hz) | **Adaptive** | 0.0 – 3.5 dB | Scaled by spectral centroid vs tanda median. Brighter tracks get more warmth |
+| `eq_vocal_gain` (2kHz) | **Adaptive** | 0.0 – 3.5 dB | Scaled by spectral centroid vs tanda median. Darker tracks get more vocal presence |
+| `hiss_cutoff` | **Adaptive** | 5,000+ Hz | Per-track, set by `find_music_cutoff()` where musical energy drops below -40dB of peak. Older recordings get a lower cutoff |
+
+**Key metric — Spectral Centroid:** The "center of mass" of the frequency spectrum, measured in Hz. A track with a high spectral centroid sounds bright and thin (energy concentrated in higher frequencies); a low spectral centroid sounds warm and dark (energy concentrated in lower frequencies). By measuring each track's spectral centroid and comparing to the tanda median, we determine whether a track needs more warmth (low-shelf boost) or more clarity (vocal peak boost) to match the group's tonal character. This is exactly what a real tango DJ adjusts with the EQ knobs between songs.
+
+**Key metric — SNR (Signal-to-Noise Ratio):** Measured by comparing energy in the signal band (200-4000Hz, where tango music lives) vs the noise band (8000-16000Hz, where hiss lives). Higher = cleaner.
+
+**Pass criteria:** mean SNR improvement >= +5 dB across batch, LUFS standard deviation < 1.0 LU across a tanda (meaning all tracks in a tanda end up at nearly the same loudness).
+
 **Detailed Tasks:**
-- Implement `atdj/audio/enhancement.py` — 7-stage pipeline:
-  read → noise reduction → tape hiss filter → EQ → limiter → LUFS normalization → write
+- Implement `atdj/audio/enhancement.py` — 7-stage pipeline (see table above)
 - Apply to 10 tracks; store in `data/processed/`; update `catalog.csv` `enhanced_file_path`
-- Measure SNR before/after using spectral flatness as noise proxy
+- Measure SNR before/after using spectral energy ratio
+
+**Design Philosophy — Minimal Intervention:**
+The goal is subtle correction, not aggressive transformation. "Do less, match more": light noise reduction, gentle EQ, and volume normalization so a 1935 recording sits naturally next to a 1948 recording in the same tanda. Enhancement should be inaudible as "processing" — the listener should just notice the tanda sounds clean and consistent.
+
+**Agentic Enhancement (future integration with WP-06):**
+Enhancement is not just batch processing — the agent reasons about **per-tanda audio consistency**:
+- **Per-tanda analysis:** When the agent forms a tanda (3-4 songs from different eras/labels), it compares SNR, loudness, and tonal profile across the tracks, then decides per-track enhancement parameters so they sound cohesive as a group.
+- **Just-in-time processing:** Enhancement runs during the previous tanda's playback (~10-12 min window). The agent plans the next tanda, decides enhancement params, processes tracks, and caches results before they're needed. Not real-time, but prepared on demand.
+- **Context-dependent decisions:** The agent decides IF enhancement is needed (remasters may already be fine), HOW MUCH (match the noisiest vs cleanest track in a tanda), and WHAT KIND (different EQ for energy vs cool-down tandas).
+- **Future functions:** `analyze_tanda_audio(track_paths) → dict` compares audio quality across tanda tracks and returns recommended per-track enhancement params. `enhance_track()` becomes a LangGraph tool the agent invokes with reasoned parameters.
 
 ---
 

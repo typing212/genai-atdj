@@ -67,7 +67,7 @@ Never commit `.env` — it is gitignored. Only `.env.example` is tracked.
 | WP-05 | Tanda Validator & Energy Arc | Planned |
 | WP-06 | LangGraph Agent Core | In progress |
 | WP-07 | ChromaDB Ingest & RAG | Planned |
-| WP-08 | Audio Enhancement Pipeline | Planned |
+| WP-08 | Audio Enhancement Pipeline | Done |
 | WP-09 | Cortina Generation & Selection | Planned |
 | WP-10 | Full UI Integration | In progress |
 | WP-11 | Evaluation & Demo Prep | Planned |
@@ -151,6 +151,30 @@ The goal of WP-04 was a working playback engine that drives the UI's Now Playing
 **UI Integration** — the Now Playing card, transport controls, transition bar, and full playlist in `page_main.py` are all driven by `PlaybackQueue` instead of WP-03 stubs.
 
 **Tests (`tests/test_playback.py`)** — 17 tests covering queue navigation, reorder, remove, session state roundtrip, and duration parsing. All passing.
+
+---
+
+## What Was Built in WP-08
+
+The goal of WP-08 was an audio enhancement pipeline for old tango recordings (1930s–60s). The pipeline applies minimal, subtle corrections so tracks within a tanda sound consistent without transforming the audio character.
+
+**Enhancement Pipeline (`atdj/audio/enhancement.py`)** — full adaptive pipeline:
+- Pipeline order: noise reduction → EQ → LUFS normalization → limiter → dynamic hiss filter
+- `enhance_track()` — single track enhancement with explicit parameters
+- `enhance_tanda()` — adaptive tanda enhancement (analyze → compute per-track params → enhance)
+- `measure_snr()`, `measure_spectral_centroid()`, `find_music_cutoff()` — audio analysis utilities
+- `analyze_tanda_tracks()` / `compute_per_track_params()` — per-tanda adaptive parameter computation
+
+**Adaptive Parameters** — each track gets different enhancement based on tanda analysis:
+- `noise_prop` — scaled by track SNR vs tanda median (noisier tracks get more reduction)
+- `eq_low_gain` / `eq_vocal_gain` — scaled by spectral centroid vs tanda median (balances brightness)
+- `hiss_cutoff` — dynamic per-track, set where musical energy drops off
+
+**PoC Notebooks:**
+- `notebooks/08_enhancement_test.ipynb` — Section A (single track pipeline), Section B (per-tanda adaptive), Section C (10-track batch validation)
+- `notebooks/08b_instrument_clarity.ipynb` — exploration of multiband compression and transient shaping (not adopted)
+
+**Tests (`tests/test_enhancement.py`)** — 10 tests with synthetic audio, all passing.
 
 ---
 

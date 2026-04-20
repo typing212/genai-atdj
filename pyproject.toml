@@ -34,6 +34,11 @@ dependencies = [
     "langchain-google-genai>=4.2.2",
     "chromadb>=1.5.8",
     "streamlit-autorefresh>=1.0.1",
+    # WP-08
+    "noisereduce>=3.0",
+    "pedalboard>=0.9",
+    "soundfile>=0.12",
+    "pyloudnorm>=0.1",
 ]
 
 [tool.uv]

@@ -89,6 +89,37 @@ Pure Python unit tests — no Streamlit, no audio files required.
 
 ---
 
+## test_enhancement.py — Audio Enhancement Pipeline (WP-08)
+
+Tests the audio enhancement pipeline using synthetic audio (sine wave + white noise). No real audio files needed.
+
+### Analysis functions
+
+| Test | What it checks |
+|---|---|
+| `test_measure_snr_positive` | Clean signal returns positive SNR |
+| `test_measure_snr_noisy_lower` | Noisier signal has lower SNR than clean signal |
+| `test_find_music_cutoff_respects_min` | Cutoff frequency never goes below the safety floor (5kHz) |
+| `test_measure_spectral_centroid_range` | Spectral centroid is within plausible range (100 Hz – Nyquist) |
+
+### Enhancement pipeline
+
+| Test | What it checks |
+|---|---|
+| `test_enhance_improves_snr` | SNR after enhancement > SNR before |
+| `test_no_clipping` | Peak amplitude never exceeds 1.0 |
+| `test_lufs_near_target` | Output LUFS within 6 LU of target (dynamic hiss filter shifts LUFS after normalization) |
+| `test_output_file_created` | Output WAV file exists, including when subdirectory needs creation |
+| `test_flat_eq_no_boost` | Zero EQ gains still improves SNR (pipeline works without EQ boost) |
+
+### Adaptive parameters
+
+| Test | What it checks |
+|---|---|
+| `test_compute_per_track_params_adaptive` | Noisier track gets higher `noise_prop` than cleaner track |
+
+---
+
 ## Upcoming tests (added per WP)
 
 | File | WP | What it will cover |

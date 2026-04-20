@@ -733,16 +733,20 @@ dependencies = [
     { name = "librosa" },
     { name = "matplotlib" },
     { name = "mutagen" },
+    { name = "noisereduce" },
     { name = "numpy" },
     { name = "pandas" },
+    { name = "pedalboard" },
     { name = "pip" },
     { name = "pydantic" },
+    { name = "pyloudnorm" },
     { name = "pytest" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "scikit-learn" },
     { name = "seaborn" },
     { name = "sentence-transformers" },
+    { name = "soundfile" },
     { name = "streamlit" },
     { name = "streamlit-autorefresh" },
     { name = "torchvision" },
@@ -762,16 +766,20 @@ requires-dist = [
     { name = "librosa", specifier = ">=0.10" },
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "mutagen", specifier = ">=1.47" },
+    { name = "noisereduce", specifier = ">=3.0" },
     { name = "numpy", specifier = ">=2.4.3" },
     { name = "pandas", specifier = ">=3.0.1" },
+    { name = "pedalboard", specifier = ">=0.9" },
     { name = "pip", specifier = ">=26.0.1" },
     { name = "pydantic", specifier = ">=2.0" },
+    { name = "pyloudnorm", specifier = ">=0.1" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "requests", specifier = ">=2.32" },
     { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sentence-transformers", specifier = ">=5.3.0" },
+    { name = "soundfile", specifier = ">=0.12" },
     { name = "streamlit", specifier = ">=1.32" },
     { name = "streamlit-autorefresh", specifier = ">=1.0.1" },
     { name = "torchvision", specifier = ">=0.26.0" },
@@ -1872,6 +1880,22 @@ wheels = [
 ]
 
 [[package]]
+name = "noisereduce"
+version = "3.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/11/08/539e3cff148b7f9bde5b4b060451a7445d708fa3fe5d8a2bc0c552976e52/noisereduce-3.0.3.tar.gz", hash = "sha256:ff64a28fb92e3c81f153cf29550e5c2db56b2523afa8f56f5e03c177cc5e918f", size = 20968, upload-time = "2024-10-06T13:43:45.431Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ce/c5/fc00b3e8f86437039fb300ba41d5d683fdf0878d8782e827c2bad074eb59/noisereduce-3.0.3-py3-none-any.whl", hash = "sha256:95cb64cfe29b5fa0311ac764755d2f503ae71571040693577796412be1a54b9d", size = 22142, upload-time = "2024-10-06T13:43:43.886Z" },
+]
+
+[[package]]
 name = "notebook"
 version = "7.5.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2310,6 +2334,25 @@ wheels = [
 ]
 
 [[package]]
+name = "pedalboard"
+version = "0.9.22"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7a/14/4d40d257bf6f26badc20826183133f635028d9b2b6657af3a460ea63e1be/pedalboard-0.9.22-cp313-cp313-macosx_10_14_x86_64.whl", hash = "sha256:001a1b94a98cabadb697cd410545fe16de6949dd80bb6f0768af682832f28873", size = 2608482, upload-time = "2026-02-02T18:31:09.106Z" },
+    { url = "https://files.pythonhosted.org/packages/0d/a1/4dc73328d2883fdd6f0f4ce29627bbe398a442fabee6e8f7194d83c14e33/pedalboard-0.9.22-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:e06d648590a4dcf2a9914f96d1b18465688c55ce890906ba13ed56866f72e91a", size = 2412698, upload-time = "2026-02-02T18:31:10.639Z" },
+    { url = "https://files.pythonhosted.org/packages/93/dd/7130967ed07057fdcc3ec0d468901f3567fdb016d655e398cd90d0ef9ece/pedalboard-0.9.22-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:472abd00d9553db507f7380d19362dbb10a15344512219c2d0447b19a972d61a", size = 4838384, upload-time = "2026-02-02T18:31:12.753Z" },
+    { url = "https://files.pythonhosted.org/packages/25/0b/672f2b0d9bf9dca56290c845a91e64969adb40eec0a8d3fc4cdf4ef3f5f1/pedalboard-0.9.22-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b00a9223f14bfb33dca43d12d7f8cf7d91b3f521da453124961da33a46b77ed7", size = 5035557, upload-time = "2026-02-02T18:31:14.504Z" },
+    { url = "https://files.pythonhosted.org/packages/1e/e2/7d32778b0cda30bf81e8d522150075f63673cd53aa009862773728f10699/pedalboard-0.9.22-cp313-cp313-win_amd64.whl", hash = "sha256:660f1993517386221cc3acf2da96a3257d428ae2b9d97802df484b4d3d32b3df", size = 3580864, upload-time = "2026-02-02T18:31:15.903Z" },
+    { url = "https://files.pythonhosted.org/packages/35/2f/f2c3cba2896f239d2f0b22a7114a9395f41af548856657c231ea64838454/pedalboard-0.9.22-cp313-cp313t-macosx_10_14_x86_64.whl", hash = "sha256:d87ddbd13aeea3523684367f364e8c9a0d4d00525e2ff01a88048a5652356797", size = 2628311, upload-time = "2026-02-02T18:31:18.349Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/7f/882631416bb0488c19857d71900ca3beeb66b504af69ca89f8ff7f44a038/pedalboard-0.9.22-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:f3108beaaaa2341c635c4ab56278a7b556f6947535d32ad8430dd68de3214df8", size = 2439237, upload-time = "2026-02-02T18:31:19.798Z" },
+    { url = "https://files.pythonhosted.org/packages/9d/6d/cf29b69a81a4be5c79162a5abfb7591dc19a814a12ff0eb6d0a842fe6f21/pedalboard-0.9.22-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e1a6cdb9e3fa591530497302e28e32e7f6eb3f1bb7a275d70840f3bdfcfedf35", size = 4841966, upload-time = "2026-02-02T18:31:21.198Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/c3/4f518534fa23a02c83288a4a2faeaea8c36c6a9e73a18d542e68fbc0442d/pedalboard-0.9.22-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:5c1efa3f8112a0d1609ddf0dacfc881a92c253fd3869ca28ef3b6c4e004800fb", size = 5039285, upload-time = "2026-02-02T18:31:22.814Z" },
+]
+
+[[package]]
 name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2648,6 +2691,19 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c3/b2/bc9c9196916376152d655522fdcebac55e66de6603a76a02bca1b6414f6c/pygments-2.20.0.tar.gz", hash = "sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f", size = 4955991, upload-time = "2026-03-29T13:29:33.898Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl", hash = "sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176", size = 1231151, upload-time = "2026-03-29T13:29:30.038Z" },
+]
+
+[[package]]
+name = "pyloudnorm"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/23/00/f915eaa75326f4209941179c2b93ac477f2040e4aeff5bb21d16eb8058f9/pyloudnorm-0.2.0.tar.gz", hash = "sha256:8bf597658ea4e1975c275adf490f6deb5369ea409f2901f939915efa4b681b16", size = 14037, upload-time = "2026-01-04T11:43:35.265Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/b6/65a49a05614b2548edbba3aab118f2ebe7441dfd778accdcdce9f6567f20/pyloudnorm-0.2.0-py3-none-any.whl", hash = "sha256:9bb69afb904f59d007a7f9ba3d75d16fb8aeef35c44d6df822a9f192d69cf13f", size = 10879, upload-time = "2026-01-04T11:43:34.534Z" },
 ]
 
 [[package]]

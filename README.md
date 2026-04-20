@@ -56,20 +56,20 @@ Never commit `.env` — it is gitignored. Only `.env.example` is tracked.
 
 ## Current Status
 
-**WP-01 complete · WP-03 first version complete · WP-02 in progress**
+**WP-01 through WP-04 complete · WP-02 in progress**
 
 | WP | Name | Status |
 |---|---|---|
 | WP-01 | Project Setup | Done |
-| WP-02 | Audio Feature Extraction & Catalog Bootstrap | In progress (Next Step) |
-| WP-03 | Static UI Wireframe | First version done |
-| WP-04 | Basic Playback Engine | Planned |
+| WP-02 | Audio Feature Extraction & Catalog Bootstrap | In progress |
+| WP-03 | Static UI Wireframe | Done |
+| WP-04 | Basic Playback Engine | Done |
 | WP-05 | Tanda Validator & Energy Arc | Planned |
-| WP-06 | LangGraph Agent Core | Planned |
+| WP-06 | LangGraph Agent Core | In progress |
 | WP-07 | ChromaDB Ingest & RAG | Planned |
 | WP-08 | Audio Enhancement Pipeline | Planned |
 | WP-09 | Cortina Generation & Selection | Planned |
-| WP-10 | Full UI Integration | Planned |
+| WP-10 | Full UI Integration | In progress |
 | WP-11 | Evaluation & Demo Prep | Planned |
 
 Full timeline and task breakdown: `doc/BLUEPRINT.md`
@@ -127,9 +127,30 @@ The goal of WP-03 was a fully laid-out static UI — no live agent logic yet, bu
 - **Now Playing / Playback / Energy Arc**: live track card (orchestra, singer, decade), transport controls, volume + gap settings, and an Altair energy-arc chart showing the planned session arc
 - **Agent Chat / Session Log**: \an agent chat panel with style/mode selectors, and a timestamped session log
 - **Full Playlist**: scrollable tanda/cortina queue with reorder (↑ ↓) and remove (×) controls; active track highlighted
-- **Search Music / Upload**: search box to find and queue tracks, file uploader for new audio
+- **Search Music**: search box to find and queue tracks from the catalog
 
 Design tokens (colors, badge styles, fonts) are in `atdj/ui/DESIGN_SYSTEM.md`.
+
+---
+
+## What Was Built in WP-04
+
+The goal of WP-04 was a working playback engine that drives the UI's Now Playing section with real audio files and Next/Skip controls.
+
+**PlaybackQueue (`atdj/playback/player.py`)** — ordered playlist with cursor management:
+- `current_track()`, `next_track()`, `previous_track()`, `skip()`, `play_pause()`, `stop()`
+- `move_up()` / `move_down()` / `remove()` for reordering the live playlist
+- `resolve_file_path()` — looks up real audio files from `data/raw/` and `data/cortinas/` via the catalog
+- `to_session_state()` / `from_session_state()` — persists queue across Streamlit reruns
+
+**Audio Player (`atdj/ui/audio_player.py`)** — custom HTML/JS component embedded in Streamlit:
+- Plays real MP3/WAV files with progress bar, volume, and auto-advance
+- Configurable transition gap between songs and cortina duration cap
+- Auto-skips missing files gracefully
+
+**UI Integration** — the Now Playing card, transport controls, transition bar, and full playlist in `page_main.py` are all driven by `PlaybackQueue` instead of WP-03 stubs.
+
+**Tests (`tests/test_playback.py`)** — 17 tests covering queue navigation, reorder, remove, session state roundtrip, and duration parsing. All passing.
 
 ---
 

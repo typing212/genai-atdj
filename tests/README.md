@@ -40,6 +40,55 @@ Uses dummy in-memory data only — no audio files, no catalog.csv required.
 
 ---
 
+## test_playback.py — PlaybackQueue Engine (WP-04)
+
+Tests the `PlaybackQueue` class that drives the UI's Now Playing section.
+Pure Python unit tests — no Streamlit, no audio files required.
+
+### Queue navigation
+
+| Test | What it checks |
+|---|---|
+| `test_current_track_empty_queue` | Empty queue returns `None` |
+| `test_current_track_returns_first` | First item is returned on a fresh queue |
+| `test_next_track_advances` | `next_track()` moves index forward and returns the correct item |
+| `test_next_track_at_end_returns_none` | At end of queue, returns `None` and sets `is_playing` to `False` |
+| `test_previous_track_at_start` | At index 0, stays at 0 and returns the first track |
+| `test_previous_track_goes_back` | Moves index backward and returns the correct item |
+| `test_skip_is_next` | `skip()` behaves identically to `next_track()` |
+
+### Playback controls
+
+| Test | What it checks |
+|---|---|
+| `test_play_pause_toggle` | `play_pause()` toggles `is_playing` between `True` and `False` |
+| `test_stop_resets` | `stop()` sets `is_playing` to `False` |
+
+### Session state persistence
+
+| Test | What it checks |
+|---|---|
+| `test_session_state_roundtrip` | `to_session_state()` → `from_session_state()` preserves index, playing state, and all items |
+
+### Duration parsing
+
+| Test | What it checks |
+|---|---|
+| `test_get_current_duration_from_string` | Parses `"3:00"` format to `180.0` seconds |
+| `test_get_current_duration_from_seconds` | Reads `duration_seconds` float directly when available |
+
+### Reorder & remove
+
+| Test | What it checks |
+|---|---|
+| `test_move_up` | Swaps item with the one above; indices update correctly |
+| `test_move_up_at_zero` | Returns `False` when already at top — no-op |
+| `test_move_down` | Swaps item with the one below; indices update correctly |
+| `test_remove_before_cursor` | Removing an item before the cursor adjusts current index down by 1 |
+| `test_remove_at_cursor` | Removing the current item advances to the next track |
+
+---
+
 ## Upcoming tests (added per WP)
 
 | File | WP | What it will cover |

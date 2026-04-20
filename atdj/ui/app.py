@@ -11,6 +11,10 @@ _CSS = """
 [data-testid="stSidebarCollapsedControl"],
 [data-testid="stSidebarCollapsedControl"] * { visibility: visible !important; display: flex !important; }
 
+/* Reduce top padding and inner gap */
+[data-testid="stMainBlockContainer"] { padding-top: 64px !important; }
+[data-testid="stMainBlockContainer"] > [data-testid="stVerticalBlock"] { gap: 10px !important; }
+
 /* Base */
 html, body, [data-testid="stAppViewContainer"] {
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
@@ -143,3 +147,6 @@ def run_app():
         st.Page(page_main.show, title="DJ Console", icon="🎵", default=True, url_path="console"),
     ]
     st.navigation(pages).run()
+
+
+run_app()

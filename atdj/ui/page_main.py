@@ -4,19 +4,20 @@ Sidebar : session history (top) + inline settings (bottom).
 Main    : Agent Chat | Music Center | Agent Log
 Bottom  : Library / Queue / Upload
 """
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 import streamlit as st
-
+import streamlit.components.v1 as st_components
 import atdj.config as cfg
 from atdj.config import CATALOG_PATH
+from atdj.playback.player import PlaybackQueue
+from atdj.ui.audio_player import render_audio_player
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
 STYLE_COLORS  = {"TANGO": "#1A5294", "VALS": "#7B2FA0", "MILONGA": "#C44040"}
+CHAT_HEIGHT   = 380
+_NP_OVERHEAD  = 190
+EA_CHART_H    = max(80, CHAT_HEIGHT - _NP_OVERHEAD)
 STYLE_ABBREV  = {"TANGO": "T", "VALS": "V", "MILONGA": "M"}
 
 NOW_PLAYING = {
@@ -37,27 +38,22 @@ QUEUE_STUB = [
 ]
 # Flat per-song playlist for the music center (replaces tanda-grouped structure)
 PLAYLIST_STUB = [
-    {"type":"song","title":"El Retirado",          "playing":True, "style":"TANGO",  "orchestra":"Carlos Di Sarli","singer":"Roberto Rufino",      "year":1942,"duration":"3:12","source":"agent","tanda_id":0},
-    {"type":"song","title":"La Capilla Blanca",    "playing":False,"style":"TANGO",  "orchestra":"Carlos Di Sarli","singer":"Roberto Rufino",      "year":1943,"duration":"2:58","source":"agent","tanda_id":0},
-    {"type":"cortina","title":"La Cumparsita (cortina cut)","duration":"0:22","source":"agent"},
-    {"type":"song","title":"Desde El Alma",        "playing":False,"style":"VALS",   "orchestra":"Francisco Canaro","singer":"Roberto Maida",      "year":1940,"duration":"3:05","source":"agent","tanda_id":1},
-    {"type":"song","title":"Soñar y Nada Más",     "playing":False,"style":"VALS",   "orchestra":"Francisco Canaro","singer":"Roberto Maida",      "year":1941,"duration":"2:52","source":"agent","tanda_id":1},
-    {"type":"song","title":"Corazón de Oro",       "playing":False,"style":"VALS",   "orchestra":"Francisco Canaro","singer":"Roberto Maida",      "year":1942,"duration":"3:08","source":"agent","tanda_id":1},
-    {"type":"cortina","title":"Poema (cortina cut)","duration":"0:20","source":"agent"},
-    {"type":"song","title":"Milongueando En El 40","playing":False,"style":"MILONGA","orchestra":"Aníbal Troilo",  "singer":"Francisco Fiorentino","year":1940,"duration":"2:44","source":"agent","tanda_id":2},
-    {"type":"song","title":"Para Qué",             "playing":False,"style":"MILONGA","orchestra":"Aníbal Troilo",  "singer":"Francisco Fiorentino","year":1941,"duration":"2:51","source":"agent","tanda_id":2},
-    {"type":"song","title":"Che Papusa Oí",        "playing":False,"style":"MILONGA","orchestra":"Aníbal Troilo",  "singer":"Francisco Fiorentino","year":1942,"duration":"2:48","source":"agent","tanda_id":2},
-    {"type":"cortina","title":"Recuerdo (cortina cut)","duration":"0:18","source":"agent"},
-    {"type":"song","title":"La Cumparsita",        "playing":False,"style":"TANGO",  "orchestra":"Juan D'Arienzo","singer":"Alberto Echagüe",     "year":1935,"duration":"2:39","source":"user", "tanda_id":3},
-    {"type":"song","title":"El Choclo",            "playing":False,"style":"TANGO",  "orchestra":"Juan D'Arienzo","singer":"Alberto Echagüe",     "year":1936,"duration":"2:55","source":"user", "tanda_id":3},
-    {"type":"song","title":"La Puñalada",          "playing":False,"style":"TANGO",  "orchestra":"Juan D'Arienzo","singer":"Alberto Echagüe",     "year":1937,"duration":"3:02","source":"user", "tanda_id":3},
+    {"type":"song","title":"Al Compas De Un Tango","style":"TANGO",  "orchestra":"Ricardo Tanturi","singer":"Alberto Castillo","year":1942,"duration":"2:38","duration_seconds":158.34,"source":"agent","tanda_id":0},
+    {"type":"song","title":"Asi Se Canta",         "style":"TANGO",  "orchestra":"Ricardo Tanturi","singer":"Enrique Campos",  "year":1943,"duration":"3:10","duration_seconds":190.12,"source":"agent","tanda_id":0},
+    {"type":"song","title":"Comparsa Criolla",     "style":"TANGO",  "orchestra":"Ricardo Tanturi","singer":"Instrumental",    "year":1941,"duration":"2:51","duration_seconds":171.4, "source":"agent","tanda_id":0},
+    {"type":"cortina","title":"Good Luck, Babe!","duration":"0:20","source":"agent"},
+    {"type":"song","title":"Desde El Alma",        "style":"VALS",   "orchestra":"Francisco Canaro","singer":"Instrumental",   "year":1947,"duration":"3:00","duration_seconds":180.39,"source":"agent","tanda_id":1},
+    {"type":"song","title":"Vibraciones Del Alma", "style":"VALS",   "orchestra":"Francisco Canaro","singer":"Instrumental",   "year":0,   "duration":"3:02","duration_seconds":182.42,"source":"agent","tanda_id":1},
+    {"type":"song","title":"Francia",              "style":"VALS",   "orchestra":"Francisco Canaro","singer":"Instrumental",   "year":0,   "duration":"2:42","duration_seconds":162.43,"source":"agent","tanda_id":1},
+    {"type":"cortina","title":"Happy (Live)","duration":"0:20","source":"agent"},
+    {"type":"song","title":"Alas",                 "style":"MILONGA","orchestra":"Osvaldo Fresedo", "singer":"Ricardo Ruiz",    "year":0,   "duration":"2:29","duration_seconds":149.82,"source":"agent","tanda_id":2},
+    {"type":"song","title":"Chuzas",               "style":"MILONGA","orchestra":"Osvaldo Pugliese","singer":"Instrumental",    "year":1956,"duration":"3:08","duration_seconds":188.03,"source":"agent","tanda_id":2},
 ]
 TANDA_PALETTE = ["#8B1A1A", "#1A4E8B", "#1A6B2A", "#7B3F00", "#4A1A7B", "#1A6B6B"]
 ENERGY_STUB = {  # title → energy 0–1; used for the Energy Arc chart
-    "El Retirado": 0.52, "La Capilla Blanca": 0.55,
-    "Desde El Alma": 0.42, "Soñar y Nada Más": 0.45, "Corazón de Oro": 0.48,
-    "Milongueando En El 40": 0.68, "Para Qué": 0.72, "Che Papusa Oí": 0.74,
-    "La Cumparsita": 0.80, "El Choclo": 0.82, "La Puñalada": 0.85,
+    "Al Compas De Un Tango": 0.45, "Asi Se Canta": 0.50, "Comparsa Criolla": 0.52,
+    "Desde El Alma": 0.38, "Vibraciones Del Alma": 0.40, "Francia": 0.42,
+    "Alas": 0.65, "Chuzas": 0.72,
 }
 
 CATALOG_COLS = ["title", "orchestra", "singer", "style", "year"]
@@ -97,6 +93,21 @@ SESSION_HISTORY = [
     {"label": "2026-03-01",           "duration": "1h 58m", "songs": 22},
 ]
 
+# ── Playback helpers ─────────────────────────────────────────────────────────
+# These are new helpers specific to this UI page — no equivalent exists elsewhere.
+
+def _get_pq() -> PlaybackQueue:
+    if "pq_data" not in st.session_state:
+        pq = PlaybackQueue(list(PLAYLIST_STUB))
+        st.session_state["pq_data"] = pq.to_session_state()
+    return PlaybackQueue.from_session_state(st.session_state["pq_data"])
+
+
+def _save_pq(pq: PlaybackQueue) -> None:
+    st.session_state["pq_data"] = pq.to_session_state()
+    st.session_state["playlist"] = pq.items
+
+
 # ── HTML helpers ─────────────────────────────────────────────────────────────
 
 def _badge(text: str, bg: str = "#F5EAEA", color: str = "#8B1A1A") -> str:
@@ -114,7 +125,7 @@ def _source_badge(source: str) -> str:
 def _badge_sm(text: str, bg: str, color: str) -> str:
     """Compact badge for playlist rows — tight padding, no letter-spacing."""
     return (
-        f'<span style="font-size:11px;background:{bg};color:{color};'
+        f'<span style="font-size:12px;background:{bg};color:{color};'
         f'border-radius:100px;padding:1px 5px;flex-shrink:0">{text}</span>'
     )
 
@@ -130,7 +141,7 @@ def _cortina_row(item: dict) -> str:
         f'margin-bottom:5px;border:1px solid #E5E5E5;border-radius:6px;background:#F2F2F2">'
         f'<span style="font-size:10px;font-weight:700;letter-spacing:.06em;color:#777777">CORTINA</span>'
         f'<span style="font-size:12px;color:#555555;flex:1">{item["title"]}</span>'
-        f'<span style="font-size:11px;color:#999999">{item["duration"]}</span>'
+        f'<span style="font-size:12px;color:#999999">{item["duration"]}</span>'
         f'</div>'
     )
 
@@ -139,7 +150,7 @@ def _tanda_card(item: dict, compact: bool = False) -> str:
     badge_html = _badge(item["style"], clr + "22", clr)
     src_html   = _source_badge(item.get("source", "agent"))
     singer_line = (
-        f'<p style="font-size:11px;color:#888;margin:0 0 3px">Singer: {item["singer"]}</p>'
+        f'<p style="font-size:12px;color:#888;margin:0 0 3px">Singer: {item["singer"]}</p>'
         if item.get("singer") else ""
     )
     if compact:
@@ -148,12 +159,12 @@ def _tanda_card(item: dict, compact: bool = False) -> str:
             f'padding:10px 14px;margin-bottom:5px">'
             f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">'
             f'{badge_html}{src_html}</div>'
-            f'<p style="font-weight:600;font-size:13px;margin:0 0 1px">{item["orchestra"]}</p>'
-            f'<p style="font-size:11px;color:#999;margin:0">{item["decade"]}</p>'
+            f'<p style="font-weight:700;font-size:13px;margin:0 0 1px">{item["orchestra"]}</p>'
+            f'<p style="font-size:12px;color:#999;margin:0">{item["decade"]}</p>'
             f'</div>'
         )
     tracks_html = "".join(
-        f'<li style="font-size:11px;color:#666;margin:1px 0">{t}</li>'
+        f'<li style="font-size:12px;color:#666;margin:1px 0">{t}</li>'
         for t in item.get("tracks", [])
     )
     return (
@@ -161,8 +172,8 @@ def _tanda_card(item: dict, compact: bool = False) -> str:
         f'padding:12px 16px;margin-bottom:5px">'
         f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
         f'{badge_html}{src_html}</div>'
-        f'<p style="font-weight:600;margin:0 0 2px">{item["orchestra"]}</p>'
-        f'<p style="font-size:11px;color:#999;margin:0 0 2px">{item["decade"]}</p>'
+        f'<p style="font-weight:700;font-size:12px;margin:0 0 2px">{item["orchestra"]}</p>'
+        f'<p style="font-size:12px;color:#999;margin:0 0 2px">{item["decade"]}</p>'
         f'{singer_line}'
         f'<ul style="margin:0;padding-left:14px">{tracks_html}</ul>'
         f'</div>'
@@ -173,7 +184,7 @@ def _tanda_color(tanda_id: int) -> str:
 
 def _hr():
     st.markdown(
-        '<hr style="margin:22px 0 18px;border:none;border-top:1px solid #EEEEEE">',
+        '<hr style="margin:2px 0 2px;border:none;border-top:1px solid #EEEEEE">',
         unsafe_allow_html=True,
     )
 
@@ -185,7 +196,7 @@ def _lbl(text: str):
         unsafe_allow_html=True,
     )
 
-def _render_energy_chart(playlist: list):
+def _render_energy_chart(playlist: list, current_index: int = 0):
     """Solid line = played · Dotted line = planned · Hover = song card."""
     import altair as alt
 
@@ -194,11 +205,17 @@ def _render_energy_chart(playlist: list):
         st.caption("No songs yet.")
         return
 
-    playing_pos = next((i for i, s in enumerate(songs) if s.get("playing")), 0)
+    # Map playlist-level current_index to song-only index
+    song_indices = [i for i, s in enumerate(playlist) if s["type"] == "song"]
+    playing_pos = 0
+    for si, pi in enumerate(song_indices):
+        if pi >= current_index:
+            playing_pos = si
+            break
     records = []
     for idx, s in enumerate(songs):
         decade = f"{(int(s['year']) // 10) * 10}s" if s.get("year") else "—"
-        records.append({
+        base_rec = {
             "pos":       idx,
             "title":     s["title"],
             "orchestra": s["orchestra"],
@@ -208,7 +225,10 @@ def _render_energy_chart(playlist: list):
             "source":    "💡 Agent" if s.get("source") == "agent" else "👤 You",
             "energy":    ENERGY_STUB.get(s["title"], 0.40 + 0.08 * (idx % 6)),
             "segment":   "played" if idx <= playing_pos else "planned",
-        })
+        }
+        records.append(base_rec)
+        if idx == playing_pos:
+            records.append({**base_rec, "segment": "planned"})
 
     df = pd.DataFrame(records)
     base = alt.Chart(df).encode(
@@ -242,7 +262,7 @@ def _render_energy_chart(playlist: list):
     )
     st.altair_chart(
         (played_line + planned_line + dots)
-        .properties(height=213)
+        .properties(height=EA_CHART_H)
         .configure_view(strokeWidth=0)
         .interactive(),
         use_container_width=True,
@@ -263,21 +283,6 @@ def _load_catalog() -> pd.DataFrame:
     except Exception:
         pass
     return pd.DataFrame(CATALOG_FALLBACK)[CATALOG_COLS]
-
-def _spectrogram_stub(seed: int, brighter: bool = False):
-    rng  = np.random.default_rng(seed)
-    data = rng.random((64, 128))
-    if brighter:
-        data = np.clip(data * 1.35, 0, 1)
-    fig, ax = plt.subplots(figsize=(5, 2.2))
-    fig.patch.set_facecolor("#FAFAFA")
-    ax.set_facecolor("#111")
-    ax.imshow(data, aspect="auto", origin="lower", cmap="magma", interpolation="lanczos")
-    ax.set_xlabel("Time →", fontsize=7, color="#666")
-    ax.set_ylabel("Hz →",   fontsize=7, color="#666")
-    ax.tick_params(colors="#888", labelsize=6)
-    fig.tight_layout(pad=0.4)
-    return fig
 
 # ── Settings helpers ─────────────────────────────────────────────────────────
 
@@ -307,7 +312,7 @@ def _sidebar():
                 width: 100% !important;
                 padding: 0 6px !important;
                 line-height: 1 !important;
-                font-size: 11px !important;
+                font-size: 12px !important;
                 border-radius: 4px !important;
             }
             section[data-testid="stSidebar"] div[data-testid="stButton"] button > div {
@@ -320,7 +325,7 @@ def _sidebar():
                 margin: 0 !important;
                 padding: 0 !important;
                 line-height: 1 !important;
-                font-size: 11px !important;
+                font-size: 12px !important;
             }
             /* ── Session scroll buttons: 4 attrs beats music-section 3 attrs, match card height ── */
             section[data-testid="stSidebar"] [data-testid="stLayoutWrapper"]
@@ -413,7 +418,7 @@ def _sidebar():
                             f'padding:5px 8px;border-radius:4px;'
                             f'background:#EEF4FB;border:1px solid #C5D9EE;border-left:3px solid #1A5294;'
                             f'overflow:hidden">'
-                            f'<span style="font-size:11px;font-weight:600;color:#1A5294;'
+                            f'<span style="font-size:12px;font-weight:700;color:#1A5294;'
                             f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 0;line-height:1.3">'
                             f'{s["label"]}</span>'
                             f'<span style="font-size:10px;color:#7A9EC0;white-space:nowrap;flex-shrink:0;line-height:1.3">'
@@ -443,7 +448,7 @@ def _sidebar():
                             f'padding:5px 8px;border-radius:4px;'
                             f'background:#FFFFFF;border:1px solid #E0E0E0;border-left:3px solid #BBBBBB;'
                             f'overflow:hidden">'
-                            f'<span style="font-size:11px;font-weight:600;color:#333;'
+                            f'<span style="font-size:12px;font-weight:700;color:#333;'
                             f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 0;line-height:1.3">'
                             f'{s["label"]}</span>'
                             f'<span style="font-size:10px;color:#999;white-space:nowrap;flex-shrink:0;line-height:1.3">'
@@ -518,10 +523,7 @@ def _sidebar():
 
 def _section_chat():
     st.markdown('<div id="agent-col-marker"></div>', unsafe_allow_html=True)
-    st.markdown(
-        '<p style="font-size:13px;font-weight:700;color:#1A1A1A;margin:0 0 10px">Agent Chat</p>',
-        unsafe_allow_html=True,
-    )
+    _lbl("Agent Chat")
 
     if "chat_msgs" not in st.session_state:
         st.session_state["chat_msgs"] = [
@@ -530,7 +532,7 @@ def _section_chat():
         ]
 
     # Chat history — scrollable
-    chat_container = st.container(height=530)
+    chat_container = st.container(height=CHAT_HEIGHT)
     with chat_container:
         for msg in st.session_state["chat_msgs"]:
             avatar = "👤" if msg["role"] == "user" else "💡"
@@ -567,6 +569,7 @@ def _section_chat():
             )
             st.session_state["s_planning"] = sel_plan
         with send_col:
+            st.markdown('<div id="send-btn-marker"></div>', unsafe_allow_html=True)
             send = st.button("➤", use_container_width=True, key="chat_send", help="Send")
 
     if send and msg_text.strip():
@@ -584,10 +587,14 @@ def _section_music():
     # Compact icon buttons in playlist rows
     st.markdown(
         """<style>
+        /* ── Minimize top padding to keep content high ── */
+        .stApp [data-testid="stAppViewBlockContainer"] {
+            padding-top: 0.25rem !important;
+        }
         /* ── Playlist compact icon buttons (default) ── */
         div[data-testid="stVerticalBlock"] div[data-testid="stButton"] button[kind="secondary"] {
             height: 26px !important; min-height: 26px !important; max-height: 26px !important;
-            padding: 0 4px !important; font-size: 11px !important;
+            padding: 0 4px !important; font-size: 12px !important;
             line-height: 1 !important; min-width: 0 !important;
             border-radius: 4px !important;
         }
@@ -595,7 +602,7 @@ def _section_music():
             padding: 0 !important;
         }
         div[data-testid="stVerticalBlock"] div[data-testid="stButton"] button[kind="secondary"] p {
-            margin: 0 !important; font-size: 11px !important;
+            margin: 0 !important; font-size: 12px !important;
         }
         div[data-testid="stVerticalBlock"] div[data-testid="stButton"] {
             margin-top: 2px !important; margin-bottom: 0 !important;
@@ -610,6 +617,19 @@ def _section_music():
             gap: 2px !important;
             margin-top: 0 !important; margin-bottom: 0 !important;
             padding-top: 0 !important; padding-bottom: 0 !important;
+            flex-wrap: nowrap !important;
+        }
+        /* ── Playlist rows (4-col): fixed button columns, flexible info band ── */
+        [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(4))
+            > [data-testid="stColumn"]:nth-child(n+2) {
+            flex: 0 0 32px !important;
+            max-width: 36px !important;
+        }
+        [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(4))
+            > [data-testid="stColumn"]:first-child {
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+            overflow: hidden !important;
         }
         /* ── Playlist/scroll secondary buttons: 28px to match song row height ── */
         [data-testid="stLayoutWrapper"] [data-testid="stHorizontalBlock"]
@@ -627,33 +647,12 @@ def _section_music():
             margin-top: 0 !important; margin-bottom: 2px !important;
         }
         /* ── Toggle label: no-wrap ── */
-        [data-testid="stToggle"] label span { white-space: nowrap !important; font-size: 11px !important; }
-        /* ── Collapse the marker container so it takes no space ── */
-        [data-testid="stElementContainer"]:has(#pb-play-marker) {
-            display: none !important;
-        }
-        /* ── Play button (▶): secondary colored blue via adjacent marker ── */
-        [data-testid="stElementContainer"]:has(#pb-play-marker)
-            + [data-testid="stElementContainer"] [data-testid="stBaseButton-secondary"] {
-            background: #1A5294 !important; border-color: #1A5294 !important; color: #FFF !important;
-        }
-        [data-testid="stElementContainer"]:has(#pb-play-marker)
-            + [data-testid="stElementContainer"] [data-testid="stBaseButton-secondary"]:hover {
-            background: #0F3369 !important; border-color: #0F3369 !important;
-        }
-        /* ── Transport buttons (▶ ⏹ ⏮ ⏭): 4 nested HBs deep — unique to btns_sub grid ── */
-        [data-testid="stHorizontalBlock"] [data-testid="stHorizontalBlock"]
-            [data-testid="stHorizontalBlock"] [data-testid="stHorizontalBlock"]
-            button[kind="secondary"] {
-            height: 36px !important; min-height: 36px !important; max-height: 36px !important;
-            padding: 0 8px !important; font-size: 14px !important; line-height: 1 !important;
-            overflow: hidden !important;
-        }
+        [data-testid="stToggle"] label span { white-space: nowrap !important; font-size: 12px !important; }
         /* ── Playlist/scroll buttons: stLayoutWrapper ancestor overrides to 28px ── */
         [data-testid="stLayoutWrapper"] [data-testid="stHorizontalBlock"]
             [data-testid="stHorizontalBlock"] button[kind="secondary"] {
             height: 28px !important; min-height: 28px !important; max-height: 28px !important;
-            padding: 0 4px !important; font-size: 11px !important; line-height: 1 !important;
+            padding: 0 4px !important; font-size: 12px !important; line-height: 1 !important;
         }
         /* ── Toggle: blue when checked (sibling + :has fallback) ── */
         [data-testid="stToggle"] input[type="checkbox"]:checked ~ div,
@@ -692,153 +691,403 @@ def _section_music():
             column-gap: 24px !important;
             gap: 24px !important;
         }
-        [data-testid="stMain"] > [data-testid="stVerticalBlock"]
-            > [data-testid="stHorizontalBlock"]
-            > [data-testid="stColumn"]
-            > [data-testid="stVerticalBlock"]
-            > [data-testid="stHorizontalBlock"] {
-            column-gap: 20px !important;
-            gap: 20px !important;
+        [data-testid="stColumn"] > [data-testid="stVerticalBlock"]
+            > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {
+            column-gap: 24px !important;
+            gap: 24px !important;
         }
+        /* ── Agent chat messages: compact padding ── */
+        [data-testid="stColumn"]:has(#agent-col-marker) [data-testid="stChatMessage"] {
+            padding: 4px 8px !important;
+            gap: 6px !important;
+        }
+        [data-testid="stColumn"]:has(#agent-col-marker) [data-testid="stChatMessage"] [data-testid="stVerticalBlock"] {
+            gap: 0px !important;
+        }
+        /* ── Chat input card: consistent 10px padding and gap ── */
+        [data-testid="stLayoutWrapper"]:has(#chat-input-card) > [data-testid="stVerticalBlock"] {
+            padding-top: 10px !important;
+            padding-bottom: 10px !important;
+            gap: 10px !important;
+        }
+        [data-testid="stElementContainer"]:has(#chat-input-card) { display: none !important; }
         /* ── Agent chat: disable textarea resize handle ── */
         [data-testid="stColumn"]:has(#agent-col-marker) textarea {
             resize: none !important;
         }
-        /* ── Agent chat send button: match selectbox height ── */
-        [data-testid="stColumn"]:has(#chat-input-card)
+        /* ── Hide send button marker ── */
+        [data-testid="stElementContainer"]:has(#send-btn-marker) { display: none !important; }
+        /* ── Playlist scroll container: mark via hidden element ── */
+        [data-testid="stElementContainer"]:has(#playlist-marker) { display: none !important; }
+        /* ── Search result ＋ button: compact like playlist buttons ── */
+        [data-testid="stColumn"]:has(#agent-col-marker) [data-testid="stLayoutWrapper"]
+            [data-testid="stButton"] button {
+            height: 28px !important; min-height: 28px !important; max-height: 28px !important;
+            padding: 0 4px !important; font-size: 12px !important;
+            line-height: 1 !important;
+        }
+        /* ── Agent chat send button: override compact rule, match selectbox 40px ── */
+        [data-testid="stColumn"]:has(#agent-col-marker) > [data-testid="stVerticalBlock"]
+            > [data-testid="stLayoutWrapper"]:has(#chat-input-card)
+            > [data-testid="stVerticalBlock"]
+            [data-testid="stButton"]
             button[data-testid="stBaseButton-secondary"] {
             height: 40px !important;
             min-height: 40px !important;
             max-height: 40px !important;
+            font-size: 14px !important;
+            padding: 0 8px !important;
+        }
+        /* ── Agent col: flex layout so search container fills remaining space ── */
+        [data-testid="stColumn"]:has(#agent-col-marker) > [data-testid="stVerticalBlock"] {
+            display: flex !important;
+            flex-direction: column !important;
+        }
+        [data-testid="stColumn"]:has(#agent-col-marker) > [data-testid="stVerticalBlock"]
+            > [data-testid="stElementContainer"]:last-of-type + [data-testid="stLayoutWrapper"],
+        [data-testid="stColumn"]:has(#agent-col-marker) > [data-testid="stVerticalBlock"]
+            > [data-testid="stLayoutWrapper"]:last-of-type {
+            flex-grow: 1 !important;
+            height: auto !important;
+            min-height: 150px !important;
+        }
+        /* ── Hide np-row-marker ── */
+        [data-testid="stElementContainer"]:has(#np-row-marker) { display: none !important; }
+        /* ── Card/ctrl row: pack controls tightly to reduce vertical gap ── */
+        [data-testid="stColumn"] [data-testid="stHorizontalBlock"]:has(#np-row-marker)
+            > [data-testid="stColumn"]:last-child [data-testid="stElementContainer"] {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }
+        [data-testid="stColumn"] [data-testid="stHorizontalBlock"]:has(#np-row-marker)
+            > [data-testid="stColumn"]:last-child [data-testid="stVerticalBlock"] {
+            gap: 2px !important;
+        }
+        /* ── Chat container: height set in Python st.container(height=380) ── */
+        /* ── Search result rows: fixed 32px button column ── */
+        [data-testid="stColumn"]:has(#agent-col-marker)
+            [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(2):last-child)
+            > [data-testid="stColumn"]:last-child {
+            flex: 0 0 32px !important;
+            max-width: 36px !important;
+        }
+        [data-testid="stColumn"]:has(#agent-col-marker)
+            [data-testid="stHorizontalBlock"]:has(> [data-testid="stColumn"]:nth-child(2):last-child)
+            > [data-testid="stColumn"]:first-child {
+            flex: 1 1 0 !important;
+            min-width: 0 !important;
+            overflow: hidden !important;
+        }
+        /* ── Force bold to 700 (Streamlit defaults to 600) ── */
+        [data-testid="stMain"] [data-testid="stMarkdownContainer"] strong {
+            font-weight: 700 !important;
+        }
+        /* ── Hide markers ── */
+        [data-testid="stElementContainer"]:has(#energy-arc-marker) { display: none !important; }
+        [data-testid="stElementContainer"]:has(#main-col-marker) { display: none !important; }
+        /* ── Collapse hr separators: tight above, normal gap below for title ── */
+        [data-testid="stColumn"]:has(#main-col-marker) [data-testid="stElementContainer"]:has(hr) {
+            margin-top: -14px !important;
+            margin-bottom: 0px !important;
+        }
+        /* ── Energy Arc section: compact internal gap (scoped to exclude playlist) ── */
+        [data-testid="stLayoutWrapper"]:has(#energy-arc-marker):not(:has(#playlist-marker)) > [data-testid="stVerticalBlock"] {
+            gap: 12px !important;
+        }
+        /* ── Playlist scroll container: small gap between rows ── */
+        [data-testid="stLayoutWrapper"]:has(#playlist-marker):not(:has(#energy-arc-marker)) > [data-testid="stVerticalBlock"] {
+            gap: 4px !important;
+        }
+        /* ── Playlist rows: min-height + clip so inner divs don't bleed into next row ── */
+        [data-testid="stLayoutWrapper"]:has(#playlist-marker):not(:has(#energy-arc-marker))
+            > [data-testid="stVerticalBlock"]
+            > [data-testid="stLayoutWrapper"] {
+            min-height: 34px !important;
+            overflow: hidden !important;
+        }
+        /* ── Playlist rows: stretch columns so border-left bands fill full height ── */
+        [data-testid="stLayoutWrapper"]:has(#playlist-marker):not(:has(#energy-arc-marker))
+            [data-testid="stHorizontalBlock"] {
+            align-items: stretch !important;
+        }
+        [data-testid="stLayoutWrapper"]:has(#playlist-marker):not(:has(#energy-arc-marker))
+            [data-testid="stColumn"] {
+            overflow: visible !important;
+        }
+        /* ── Hide ctrl-col-marker ── */
+        [data-testid="stElementContainer"]:has(#ctrl-col-marker) { display: none !important; }
+        /* ── Playback ctrl column: unbold all labels ── */
+        [data-testid="stColumn"]:has(#ctrl-col-marker) [data-testid="stWidgetLabel"] p {
+            font-size: 13px !important;
+            font-weight: 400 !important;
+            color: #31333F !important;
+        }
+        /* ── Playback controls: center-align buttons with transition bar ── */
+        [data-testid="stColumn"]:has(> [data-testid="stVerticalBlock"] > [data-testid="stElementContainer"]:has(#ctrl-col-marker)) [data-testid="stHorizontalBlock"] {
+            align-items: center !important;
+        }
+        [data-testid="stColumn"]:has(#ctrl-col-marker) [data-testid="stBaseButton-secondary"] {
+            margin-top: 0 !important;
+        }
+        [data-testid="stColumn"]:has(#ctrl-col-marker) [data-testid="stElementContainer"]:has([data-testid="stBaseButton-secondary"]) [data-testid="stWidgetLabel"] {
+            display: none !important;
+        }
+        /* ── Compact number inputs so added spacing doesn't grow total height ── */
+        [data-testid="stColumn"]:has(#ctrl-col-marker) [data-testid="stNumberInput"] input {
+            height: 34px !important;
+            min-height: 34px !important;
+            padding: 4px 10px !important;
+        }
+        /* ── Number input: fill container background to remove white-line gaps ── */
+        [data-testid="stColumn"]:has(#ctrl-col-marker) [data-testid="stNumberInputContainer"] {
+            background: rgb(240, 240, 240) !important;
+        }
+        /* ── Remove default vertical gap inside ctrl column so spacers control spacing ── */
+        [data-testid="stColumn"]:has(#ctrl-col-marker) > [data-testid="stVerticalBlock"] {
+            gap: 0.25rem !important;
+        }
+        /* ── Main column: consistent section spacing (must come after ctrl-col rule) ── */
+        [data-testid="stColumn"]:has(#main-col-marker) > [data-testid="stVerticalBlock"] {
+            gap: 16px !important;
         }
         </style>""",
         unsafe_allow_html=True,
     )
     main_col, agent_col = st.columns([4, 5])
 
+    pq = _get_pq()
+
     with main_col:
-        # ── Row 1: NOW PLAYING (col1) | PLAYBACK (col2) | ENERGY ARC (col3) ──
-        # Ratios [2,2,5] — row 3 uses [4,5] so col1+col2=4 aligns with SEARCH MUSIC
-        np_col, pb_col, ea_col = st.columns([2, 3, 4])
+        st.markdown('<div id="main-col-marker"></div>', unsafe_allow_html=True)
+        # ── Row 1: NOW PLAYING card (left) | player + controls (right) ──
+        _lbl("Now Playing")
+        np_item = pq.current_track()
+        pos = pq.current_index + 1
+        total = len(pq.items)
+        card_col, ctrl_col = st.columns([2, 3], vertical_alignment="top")
 
-        with np_col:
-            _lbl("Now Playing")
-            np_clr = STYLE_COLORS[NOW_PLAYING["style"]]
-            np_decade = f'{(NOW_PLAYING["year"] // 10) * 10}s'
-            np_singer_html = (
-                f'<p style="color:#666;font-size:11px;margin:0 0 3px">{NOW_PLAYING["singer"]}</p>'
-                if NOW_PLAYING.get("singer") else ""
-            )
-            st.markdown(
-                f'<div style="background:#FFF;border:1px solid #EBEBEB;border-left:3px solid {np_clr};'
-                f'border-radius:8px;padding:10px 14px;margin:4px 0 6px">'
-                f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
-                f'{_badge(NOW_PLAYING["style"], np_clr+"22", np_clr)}'
-                f'{_source_badge(NOW_PLAYING["source"])}</div>'
-                f'<p style="font-size:18px;font-weight:700;margin:0 0 6px">{NOW_PLAYING["title"]}</p>'
-                f'<p style="color:#333;font-size:12px;font-weight:600;margin:0 0 3px">{NOW_PLAYING["orchestra"]}</p>'
-                f'{np_singer_html}'
-                f'<p style="color:#999;font-size:11px;margin:0">{np_decade} · {NOW_PLAYING["year"]}</p>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-            st.progress(NOW_PLAYING["progress"])
-            st.caption(f'Track {NOW_PLAYING["track_num"]} · 1:24 remaining')
-
-        with pb_col:
-            _lbl("Playback")
-            vol_sub, btns_sub = st.columns([1, 2])
-            with vol_sub:
-                # Vertical volume slider (rows 1-3)
+        with card_col:
+            st.markdown('<div id="np-row-marker"></div>', unsafe_allow_html=True)
+            if np_item and np_item.get("type") == "song":
+                np_style = np_item.get("style", "TANGO").upper()
+                np_clr = STYLE_COLORS.get(np_style, "#888")
+                np_year = np_item.get("year", 0)
+                np_decade = f'{(np_year // 10) * 10}s' if np_year else ""
+                np_singer_html = (
+                    f'<p style="color:#666;font-size:12px;margin:0 0 3px">{np_item["singer"]}</p>'
+                    if np_item.get("singer") else ""
+                )
+                np_year_html = (
+                    f'<p style="color:#999;font-size:12px;margin:0">{np_decade} · {np_year}</p>'
+                    if np_year else '<p style="color:#999;font-size:12px;margin:0">Unknown year</p>'
+                )
                 st.markdown(
-                    '<p style="font-size:10px;color:#AAAAAA;margin:0 0 2px;text-align:center">Vol</p>'
-                    '<div style="display:flex;justify-content:center;align-items:center;'
-                    'height:106px;padding:2px 0">'
-                    '<input type="range" min="0" max="100" value="75" '
-                    'style="writing-mode:vertical-lr;direction:rtl;height:96px;width:20px;'
-                    'cursor:pointer;accent-color:#1A5294;"></div>',
+                    f'<div style="position:relative;background:#FFF;border:1px solid #EBEBEB;'
+                    f'border-left:3px solid {np_clr};border-radius:8px;padding:6px 14px;'
+                    f'margin:0;min-height:140px">'
+                    f'<span style="position:absolute;top:8px;right:12px;font-size:10px;font-weight:700;color:#AAA">'
+                    f'{pos}/{total}</span>'
+                    f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
+                    f'{_badge(np_style, np_clr+"22", np_clr)}'
+                    f'{_source_badge(np_item.get("source", "agent"))}</div>'
+                    f'<p style="font-size:18px;font-weight:700;margin:0 0 6px">{np_item.get("title", "")}</p>'
+                    f'<p style="color:#333;font-size:12px;font-weight:700;margin:0 0 3px">{np_item.get("orchestra", "")}</p>'
+                    f'{np_singer_html}'
+                    f'{np_year_html}'
+                    f'</div>',
                     unsafe_allow_html=True,
                 )
-            with btns_sub:
-                # Row 1: Play | Stop
-                r1c1, r1c2 = st.columns(2)
-                with r1c1:
-                    st.markdown('<div id="pb-play-marker"></div>', unsafe_allow_html=True)
-                    if st.button("▶", use_container_width=True, help="Play / Pause", type="secondary", key="pb_play"):
-                        st.toast("Playing.", icon="▶")
-                with r1c2:
-                    if st.button("⏹", use_container_width=True, help="Stop", key="pb_stop"):
-                        st.toast("Stopped.", icon="⏹")
-                # Row 2: Reverse | Skip
-                r2c1, r2c2 = st.columns(2)
-                with r2c1:
+            elif np_item and np_item.get("type") == "cortina":
+                cort_len = st.session_state.get("cortina_len", 30)
+                c_m, c_s = divmod(cort_len, 60)
+                cort_dur = f"{c_m}:{c_s:02d}"
+                cortina_badge = _badge("CORTINA", "#E0E0E0", "#777777")
+                st.markdown(
+                    f'<div style="position:relative;background:#FFF;border:1px solid #EBEBEB;'
+                    f'border-left:3px solid #BBB;border-radius:8px;padding:6px 14px;'
+                    f'margin:0;min-height:140px">'
+                    f'<span style="position:absolute;top:8px;right:12px;font-size:10px;font-weight:700;color:#AAA">'
+                    f'{pos}/{total}</span>'
+                    f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">'
+                    f'{cortina_badge}'
+                    f'{_source_badge(np_item.get("source", "agent"))}</div>'
+                    f'<p style="font-size:18px;font-weight:700;margin:0 0 6px">{np_item.get("title", "")}</p>'
+                    f'<p style="color:#999;font-size:12px;margin:0">Plays for {cort_dur}</p>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.info("No tracks in queue.")
+
+        with ctrl_col:
+            st.markdown('<div id="ctrl-col-marker"></div>', unsafe_allow_html=True)
+            if np_item:
+                file_path = pq.resolve_file_path(np_item)
+                gap_sec = st.session_state.get("song_gap", 10)
+                cortina_sec = st.session_state.get("cortina_len", 30)
+                is_cortina = np_item.get("type") == "cortina"
+                max_dur = cortina_sec if is_cortina else None
+                effective_gap = 0 if is_cortina else gap_sec
+                if file_path:
+                    render_audio_player(
+                        file_path, gap_seconds=effective_gap,
+                        max_duration=max_dur, fade_in_seconds=2.0,
+                    )
+                else:
+                    _autoskip_html = f"""
+                    <span style="display:none">skip:{pq.current_index}</span>
+                    <style>* {{ margin:0; padding:0; box-sizing:border-box; }}
+                    #msg {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                      background:#FFF8E1;border:1px solid #FFE082;border-radius:8px;
+                      padding:10px 14px;font-size:12px;color:#8D6E00; }}</style>
+                    <div id="msg">Audio file not found — auto-skipping…</div>
+                    <script>
+                    const gapMs = {int(effective_gap * 1000)};
+                    const myNonce = Math.random().toString(36);
+                    window.parent.__atdjAutoSkipNonce = myNonce;
+                    if (window.parent.__atdjAutoSkipTimer) window.parent.clearTimeout(window.parent.__atdjAutoSkipTimer);
+                    function clickSkip() {{
+                        if (window.parent.__atdjAutoSkipNonce !== myNonce) return;
+                        const btns = window.parent.document.querySelectorAll('button');
+                        for (const btn of btns) {{
+                            if (btn.innerText.includes('\\u23ed')) {{ btn.click(); break; }}
+                        }}
+                    }}
+                    if (gapMs > 0) {{
+                        window.parent.__atdjGapSignal = {{duration: gapMs, id: myNonce}};
+                        window.parent.__atdjAutoSkipTimer = window.parent.setTimeout(clickSkip, gapMs);
+                    }} else {{
+                        window.parent.__atdjAutoSkipTimer = window.parent.setTimeout(clickSkip, 500);
+                    }}
+                    </script>
+                    """
+                    st_components.html(_autoskip_html, height=40)
+
+                st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
+                btn1, btn2, gap_bar_col = st.columns([1, 1, 6], vertical_alignment="center")
+                with btn1:
                     if st.button("⏮", use_container_width=True, help="Previous track", key="pb_prev"):
-                        st.toast("Previous track.", icon="⏮")
-                with r2c2:
+                        pq.previous_track()
+                        _save_pq(pq)
+                        st.rerun()
+                with btn2:
                     if st.button("⏭", use_container_width=True, help="Skip to next", key="pb_skip"):
-                        st.toast("Skipped.", icon="⏭")
-                # Row 3: Auto enhance (spans btns_sub width)
-                st.toggle("Auto enhance", value=True, key="auto_enhance")
-            # Row 4: Gap setting — label + input on same row
-            gl, gi = st.columns([2, 3], vertical_alignment="center")
-            with gl:
-                st.markdown(
-                    '<p style="font-size:12px;color:#555;margin:0">Gap (sec)</p>',
-                    unsafe_allow_html=True,
-                )
-            with gi:
-                st.number_input(
-                    "Gap", min_value=0, max_value=60, value=10, key="song_gap",
-                    label_visibility="collapsed",
-                )
+                        pq.next_track()
+                        _save_pq(pq)
+                        st.rerun()
+                with gap_bar_col:
+                    _gap_bar_html = f"""
+                    <span style="display:none">track:{pq.current_index}</span>
+                    <style>
+                      * {{ margin:0; padding:0; box-sizing:border-box; }}
+                      html, body {{ height:100%; }}
+                      body {{ display:flex; align-items:center; }}
+                      #gap-wrap {{ width:100%; display:flex; align-items:center;
+                        border-left:1px solid #E0E0E0; padding-left:12px; gap:10px; }}
+                      #gap-label {{ font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+                        font-size:13px; font-weight:400; color:#31333F;
+                        white-space:nowrap; flex-shrink:0; }}
+                      #gap-track {{ flex:1; height:4px; background:#E5E5E5; border-radius:2px; overflow:hidden; }}
+                      #gap-fill {{ height:100%; width:0%; background:#1A5294; border-radius:2px; transition:none; }}
+                    </style>
+                    <div id="gap-wrap">
+                      <div id="gap-label">Transition</div>
+                      <div id="gap-track"><div id="gap-fill"></div></div>
+                    </div>
+                    <script>
+                    let __lastSigId = null;
+                    setInterval(() => {{
+                        const sig = window.parent.__atdjGapSignal;
+                        if (sig && sig.id && sig.id !== __lastSigId) {{
+                            __lastSigId = sig.id;
+                            const fill = document.getElementById('gap-fill');
+                            fill.style.transition = 'none';
+                            fill.style.width = '0%';
+                            requestAnimationFrame(() => {{
+                                requestAnimationFrame(() => {{
+                                    fill.style.transition = 'width ' + sig.duration + 'ms linear';
+                                    fill.style.width = '100%';
+                                }});
+                            }});
+                        }}
+                    }}, 100);
+                    </script>
+                    """
+                    st_components.html(_gap_bar_html, height=28)
+                st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
+                enh_c, gap_c, cort_c = st.columns(3)
+                with enh_c:
+                    st.markdown(
+                        '<p style="font-size:13px;font-weight:400;color:#31333F;margin:0 0 14px">Quality Enhance</p>',
+                        unsafe_allow_html=True,
+                    )
+                    st.toggle("Quality Enhance", value=True, key="auto_enhance",
+                              label_visibility="collapsed")
+                with gap_c:
+                    st.number_input(
+                        "Transition (s)", min_value=0, max_value=60, value=10, key="song_gap",
+                        label_visibility="visible",
+                    )
+                with cort_c:
+                    st.number_input(
+                        "Cortina (s)", min_value=5, max_value=120, value=30, key="cortina_len",
+                        label_visibility="visible",
+                    )
 
-        with ea_col:
+        # ── Row 2: ENERGY ARC (full width of main_col) ──
+        _hr()
+        with st.container():
+            st.markdown('<div id="energy-arc-marker"></div>', unsafe_allow_html=True)
             _lbl("Energy Arc")
-            _render_energy_chart(st.session_state.get("playlist", list(PLAYLIST_STUB)))
+            _render_energy_chart(pq.items, pq.current_index)
 
-        # ── Row 2: FULL PLAYLIST (spans col1+col2+col3, full main_col width) ──
+        # ── Row 3: FULL PLAYLIST ──
         _hr()
         _lbl("Full Playlist")
-        playlist = st.session_state.get("playlist", list(PLAYLIST_STUB))
+        playlist = pq.items
+        cortina_len = st.session_state.get("cortina_len", 30)
 
-        with st.container(height=441):
+        with st.container(height=782):
+            st.markdown('<div id="playlist-marker"></div>', unsafe_allow_html=True)
             for i, item in enumerate(playlist):
                 # ── Cortina row ──
                 if item["type"] == "cortina":
                     b_src_c = _source_icon(item.get("source", "agent"))
-                    b_cort  = _badge_sm("CORTINA", "#EEEEEE", "#888888")
-                    sc_c, btns_c = st.columns([8, 1])
+                    b_cort  = _badge_sm("C", "#EEEEEE", "#888888")
+                    sc_c, cb1, cb2, cb3 = st.columns([20, 1, 1, 1])
+                    c_mins, c_secs = divmod(cortina_len, 60)
+                    c_dur_str = f"{c_mins}:{c_secs:02d}"
                     with sc_c:
                         st.markdown(
                             f'<div style="padding:5px 8px;border-left:2px solid #BBBBBB;'
-                            f'background:#F2F2F2;margin-bottom:2px;display:flex;'
+                            f'background:#F2F2F2;margin-bottom:0;display:flex;'
                             f'align-items:center;gap:5px;overflow:hidden;white-space:nowrap">'
                             f'{b_cort}{b_src_c}'
                             f'<span style="font-size:12px;font-weight:700;color:#555;'
                             f'flex-shrink:0">{item["title"]}</span>'
-                            f'<span style="font-size:12px;color:#999;"> · {item["duration"]}</span>'
+                            f'<span style="font-size:12px;color:#999;"> · {c_dur_str}</span>'
                             f'</div>',
                             unsafe_allow_html=True,
                         )
-                    with btns_c:
-                        cb1, cb2, cb3 = st.columns(3)
-                        with cb1:
-                            if i > 0:
-                                if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
-                                    playlist[i], playlist[i - 1] = playlist[i - 1], playlist[i]
-                                    st.session_state["playlist"] = playlist
-                                    st.rerun()
-                        with cb2:
-                            if i < len(playlist) - 1:
-                                if st.button("↓", key=f"pl_dn_{i}", help="Move down", use_container_width=True):
-                                    playlist[i], playlist[i + 1] = playlist[i + 1], playlist[i]
-                                    st.session_state["playlist"] = playlist
-                                    st.rerun()
-                        with cb3:
-                            if st.button("x", key=f"pl_rm_{i}", help="Remove", use_container_width=True):
-                                playlist.pop(i)
-                                st.session_state["playlist"] = playlist
+                    with cb1:
+                        if i > 0:
+                            if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
+                                pq.move_up(i)
+                                _save_pq(pq)
                                 st.rerun()
+                    with cb2:
+                        if i < len(playlist) - 1:
+                            if st.button("↓", key=f"pl_dn_{i}", help="Move down", use_container_width=True):
+                                pq.move_down(i)
+                                _save_pq(pq)
+                                st.rerun()
+                    with cb3:
+                        if st.button("x", key=f"pl_rm_{i}", help="Remove", use_container_width=True):
+                            pq.remove(i)
+                            _save_pq(pq)
+                            st.rerun()
                     continue
 
                 # ── Song row ──
@@ -851,28 +1100,31 @@ def _section_music():
                 b_style    = _badge_sm(abbrev, clr + "22", clr)
                 b_src      = _source_icon(item.get("source", "agent"))
 
-                if item.get("playing"):
-                    st.markdown(
-                        f'<div style="padding:5px 8px;border-left:3px solid {clr};'
-                        f'background:{clr}22;margin-bottom:2px;display:flex;align-items:center;'
-                        f'gap:5px;overflow:hidden;white-space:nowrap">'
-                        f'<span style="font-size:11px;color:{clr};flex-shrink:0">▶</span>'
-                        f'{b_style}{b_src}'
-                        f'<span style="font-size:12px;font-weight:700;color:#1A1A1A;'
-                        f'flex-shrink:0">{item["title"]}</span>'
-                        f'<span style="font-size:12px;color:#555;overflow:hidden;'
-                        f'text-overflow:ellipsis"> · {meta}</span>'
-                        f'</div>',
-                        unsafe_allow_html=True,
-                    )
+                is_current = (i == pq.current_index)
+                if is_current:
+                    sc, _b1, _b2, _b3 = st.columns([20, 1, 1, 1])
+                    with sc:
+                        st.markdown(
+                            f'<div style="padding:5px 8px;border-left:3px solid {clr};'
+                            f'background:{clr}22;margin-bottom:0;display:flex;align-items:center;'
+                            f'gap:5px;overflow:hidden;white-space:nowrap">'
+                            f'<span style="font-size:12px;color:{clr};flex-shrink:0">▶</span>'
+                            f'{b_style}{b_src}'
+                            f'<span style="font-size:12px;font-weight:700;color:#1A1A1A;'
+                            f'flex-shrink:0">{item["title"]}</span>'
+                            f'<span style="font-size:12px;color:#555;overflow:hidden;'
+                            f'text-overflow:ellipsis"> · {meta}</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
                 else:
                     prev_s = next((j for j in range(i - 1, -1, -1) if playlist[j]["type"] != "cortina"), -1)
                     next_s = next((j for j in range(i + 1, len(playlist)) if playlist[j]["type"] != "cortina"), -1)
-                    sc, btns_col = st.columns([8, 1])
+                    sc, b1, b2, b3 = st.columns([20, 1, 1, 1])
                     with sc:
                         st.markdown(
                             f'<div style="padding:5px 8px;border-left:2px solid {clr}88;'
-                            f'background:{clr}11;margin-bottom:2px;display:flex;'
+                            f'background:{clr}11;margin-bottom:0;display:flex;'
                             f'align-items:center;gap:5px;overflow:hidden;white-space:nowrap">'
                             f'{b_style}{b_src}'
                             f'<span style="font-size:12px;font-weight:700;color:#333;'
@@ -882,96 +1134,30 @@ def _section_music():
                             f'</div>',
                             unsafe_allow_html=True,
                         )
-                    with btns_col:
-                        b1, b2, b3 = st.columns(3)
-                        with b1:
-                            if prev_s >= 0 and not playlist[prev_s].get("playing", False):
-                                if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
-                                    playlist[i], playlist[prev_s] = playlist[prev_s], playlist[i]
-                                    st.session_state["playlist"] = playlist
-                                    st.rerun()
-                        with b2:
-                            if next_s >= 0:
-                                if st.button("↓", key=f"pl_dn_{i}", help="Move down", use_container_width=True):
-                                    playlist[i], playlist[next_s] = playlist[next_s], playlist[i]
-                                    st.session_state["playlist"] = playlist
-                                    st.rerun()
-                        with b3:
-                            if st.button("x", key=f"pl_rm_{i}", help="Remove", use_container_width=True):
-                                playlist.pop(i)
-                                st.session_state["playlist"] = playlist
+                    with b1:
+                        if prev_s >= 0 and prev_s != pq.current_index:
+                            if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
+                                pq.move_up(i)
+                                _save_pq(pq)
                                 st.rerun()
-
-        # ── Row 3: SEARCH MUSIC (col1+col2) | SESSION LOG (col3) ─────────────
-        # [4,5] mirrors row-1 [2,2,5]: 4=col1+col2, 5=col3
-        _hr()
-        sm_col, sl_col = st.columns([5, 4])
-
-        with sm_col:
-            _lbl("Search Music")
-            query = st.text_input(
-                "Search", placeholder="Title, artist, style…",
-                label_visibility="collapsed", key="music_search",
-            )
-            if query.strip():
-                df = _load_catalog()
-                mask = (
-                    df["title"].str.contains(query, case=False, na=False) |
-                    df["orchestra"].str.contains(query, case=False, na=False) |
-                    df["style"].str.contains(query, case=False, na=False) |
-                    df["singer"].astype(str).str.contains(query, case=False, na=False)
-                )
-                results = df[mask].head(6)
-                if results.empty:
-                    st.caption("No results found.")
-                else:
-                    pl = st.session_state.get("playlist", list(PLAYLIST_STUB))
-                    next_tid = max((p.get("tanda_id", 0) for p in pl if p["type"] == "song"), default=0) + 1
-                    for _, row in results.iterrows():
-                        rclr = STYLE_COLORS.get(row["style"].upper(), "#888")
-                        res_col, add_col = st.columns([5, 1], vertical_alignment="center")
-                        with res_col:
-                            singer_part = f' · {row["singer"]}' if str(row.get("singer", "")) not in ("", "nan") else ""
-                            st.markdown(
-                                f'<div style="padding:3px 0;font-size:12px;'
-                                f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
-                                f'<span style="display:inline-block;width:7px;height:7px;background:{rclr};'
-                                f'border-radius:50%;margin-right:5px;vertical-align:middle"></span>'
-                                f'<strong>{row["title"]}</strong>'
-                                f'<span style="color:#777"> · {row["orchestra"]}{singer_part} · {int(row["year"])}</span>'
-                                f'</div>',
-                                unsafe_allow_html=True,
-                            )
-                        with add_col:
-                            if st.button("＋", key=f"srch_add_{row['title']}", use_container_width=True,
-                                         help="Add to end of playlist"):
-                                entry = {
-                                    "type": "song", "title": row["title"], "playing": False,
-                                    "style": row["style"].upper(), "orchestra": row["orchestra"],
-                                    "singer": str(row.get("singer", "")) if str(row.get("singer", "")) != "nan" else "",
-                                    "year": int(row["year"]) if pd.notna(row.get("year")) else 0,
-                                    "source": "user", "tanda_id": next_tid,
-                                }
-                                pl.append(entry)
-                                st.session_state["playlist"] = pl
-                                st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "change", "text": f'You added "{row["title"]}" to playlist end.'}
-                                )
-                                st.toast(f'"{row["title"]}" added to playlist.', icon="👤")
+                    with b2:
+                        if next_s >= 0:
+                            if st.button("↓", key=f"pl_dn_{i}", help="Move down", use_container_width=True):
+                                pq.move_down(i)
+                                _save_pq(pq)
                                 st.rerun()
-            else:
-                st.caption("Search to find and add songs.")
+                    with b3:
+                        if st.button("x", key=f"pl_rm_{i}", help="Remove", use_container_width=True):
+                            pq.remove(i)
+                            _save_pq(pq)
+                            st.rerun()
 
-        with sl_col:
-            _lbl("Upload")
-            with st.container(height=200):
-                _tab_upload()
 
     # ── Agent Chat (full height, right column) ────────────────────────────────
     with agent_col:
         _section_chat()
         st.markdown(
-            '<hr style="margin:22px 0 18px;border:none;border-top:1px solid #EEEEEE">',
+            '<hr style="margin:2px 0 2px;border:none;border-top:1px solid #EEEEEE">',
             unsafe_allow_html=True,
         )
         _lbl("Session Log")
@@ -989,7 +1175,7 @@ def _section_music():
                 {"type": "info",   "text": "All 8 tandas confirmed. Session map finalized."},
             ]
         notif_colors = {"info": ("#E8F4FD", "#1A6FAD"), "change": ("#FEF9E7", "#B7770D")}
-        with st.container(height=200):
+        with st.container(height=150):
             for n in reversed(st.session_state["agent_notifications"]):
                 bg, clr = notif_colors.get(n["type"], ("#F7F7F7", "#555"))
                 st.markdown(
@@ -998,6 +1184,66 @@ def _section_music():
                     f'{n["text"]}</div>',
                     unsafe_allow_html=True,
                 )
+
+        # ── Search Music ─────────────────────────────────────────────────────
+        st.markdown(
+            '<hr style="margin:2px 0 2px;border:none;border-top:1px solid #EEEEEE">',
+            unsafe_allow_html=True,
+        )
+        _lbl("Search Music")
+        pq = _get_pq()
+        query = st.text_input(
+            "Search", placeholder="Title, artist, style…",
+            label_visibility="collapsed", key="music_search",
+        )
+        with st.container(height=280):
+            if query.strip():
+                df = _load_catalog()
+                mask = (
+                    df["title"].str.contains(query, case=False, na=False) |
+                    df["orchestra"].str.contains(query, case=False, na=False) |
+                    df["style"].str.contains(query, case=False, na=False) |
+                    df["singer"].astype(str).str.contains(query, case=False, na=False)
+                )
+                results = df[mask].head(6)
+                if results.empty:
+                    st.caption("No results found.")
+                else:
+                    next_tid = max((p.get("tanda_id", 0) for p in pq.items if p["type"] == "song"), default=0) + 1
+                    for _, row in results.iterrows():
+                        rclr = STYLE_COLORS.get(row["style"].upper(), "#888")
+                        res_col, add_col = st.columns([7, 1])
+                        with res_col:
+                            singer_part = f' · {row["singer"]}' if str(row.get("singer", "")) not in ("", "nan") else ""
+                            st.markdown(
+                                f'<div style="padding:3px 0;font-size:12px;'
+                                f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+                                f'<span style="display:inline-block;width:7px;height:7px;background:{rclr};'
+                                f'border-radius:50%;margin-right:5px;vertical-align:middle"></span>'
+                                f'<strong>{row["title"]}</strong>'
+                                f'<span style="color:#777"> · {row["orchestra"]}{singer_part} · {int(row["year"]) if pd.notna(row.get("year")) else ""}</span>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with add_col:
+                            if st.button("＋", key=f"srch_add_{row['title']}", use_container_width=True,
+                                         help="Add to end of playlist"):
+                                entry = {
+                                    "type": "song", "title": row["title"],
+                                    "style": row["style"].upper(), "orchestra": row["orchestra"],
+                                    "singer": str(row.get("singer", "")) if str(row.get("singer", "")) != "nan" else "",
+                                    "year": int(row["year"]) if pd.notna(row.get("year")) else 0,
+                                    "source": "user", "tanda_id": next_tid,
+                                }
+                                pq.items.append(entry)
+                                _save_pq(pq)
+                                st.session_state.setdefault("agent_notifications", []).append(
+                                    {"type": "change", "text": f'You added "{row["title"]}" to playlist end.'}
+                                )
+                                st.toast(f'"{row["title"]}" added to playlist.', icon="👤")
+                                st.rerun()
+            else:
+                st.caption("Search to find and add songs.")
 
 # ── Right column: Agent Log ──────────────────────────────────────────────────
 
@@ -1025,7 +1271,7 @@ def _section_log():
             bg, clr = notif_colors.get(n["type"], ("#F7F7F7", "#555"))
             st.markdown(
                 f'<div style="background:{bg};border-left:3px solid {clr};'
-                f'border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:5px;font-size:11px;color:#333">'
+                f'border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:5px;font-size:12px;color:#333">'
                 f'{n["text"]}</div>',
                 unsafe_allow_html=True,
             )
@@ -1034,12 +1280,7 @@ def _section_log():
 
 def _section_library():
     st.divider()
-    tab_lib, tab_upload = st.tabs(["🔍 Library", "📤 Upload"])
-
-    with tab_lib:
-        _tab_library()
-    with tab_upload:
-        _tab_upload()
+    _tab_library()
 
 
 def _tab_library():
@@ -1100,7 +1341,7 @@ def _tab_queue():
                     f'border:1px dashed #DDD;border-radius:6px;margin-bottom:3px;background:#FAFAFA">'
                     f'<span style="font-size:10px;font-weight:700;color:#999">CORTINA</span>'
                     f'<span style="font-size:12px;color:#666;flex:1">{item["title"]}</span>'
-                    f'<span style="font-size:11px;color:#AAA">{item["duration"]}</span>'
+                    f'<span style="font-size:12px;color:#AAA">{item["duration"]}</span>'
                     f'</div>', unsafe_allow_html=True)
             else:
                 clr = STYLE_COLORS.get(item["style"], "#888")
@@ -1112,7 +1353,7 @@ def _tab_queue():
                     f'border-radius:100px;padding:2px 7px">{item["style"]}</span>'
                     f'{src}'
                     f'<span style="font-weight:600;font-size:13px;flex:1">{item["orchestra"]}</span>'
-                    f'<span style="font-size:11px;color:#999">{item.get("decade","")}</span>'
+                    f'<span style="font-size:12px;color:#999">{item.get("decade","")}</span>'
                     f'</div>', unsafe_allow_html=True)
         with row_r:
             if st.button("x", key=f"rm_{i}", help="Remove from queue", use_container_width=True):
@@ -1121,38 +1362,6 @@ def _tab_queue():
                 st.toast("Removed from queue.", icon="🗑")
                 st.rerun()
 
-
-def _tab_upload():
-    uploaded = st.file_uploader(
-        "Drop a track", type=["mp3", "wav", "flac"], label_visibility="collapsed",
-    )
-    if uploaded is not None:
-        st.markdown(f"**{uploaded.name}**")
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown("**Before**")
-            fig = _spectrogram_stub(42)
-            st.pyplot(fig, use_container_width=True)
-            plt.close(fig)
-        with c2:
-            st.markdown("**After**")
-            fig2 = _spectrogram_stub(99, brighter=True)
-            st.pyplot(fig2, use_container_width=True)
-            plt.close(fig2)
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Est. SNR", "18.3 dB", "+5.8 dB")
-        m2.metric("Duration", "3:12")
-        m3.metric("Format", uploaded.name.rsplit(".", 1)[-1].upper())
-        st.write("")
-        ec1, ec2 = st.columns([2, 1])
-        with ec1:
-            if st.button("Enhance & Add to Pool", type="primary", use_container_width=True):
-                with st.spinner("Enhancing…"):
-                    import time; time.sleep(1.5)
-                st.toast("Enhancement complete — track added to pool. _(stub)_", icon="✅")
-        with ec2:
-            if st.button("Add Without Enhancing", use_container_width=True):
-                st.toast("Track added to pool as-is. _(stub)_", icon="📂")
 
 # ── Main entry point ─────────────────────────────────────────────────────────
 
@@ -1168,7 +1377,7 @@ def show():
         f'<span style="font-size:18px;font-weight:700;color:#1A1A1A">DJ Console</span>'
         f'<span style="font-size:12px;color:#999">{_sess_lbl}</span>'
         f'</div>'
-        f'<hr style="margin:4px 0 10px;border:none;border-top:1px solid #EBEBEB">',
+        f'<hr style="margin:4px 0 0;border:none;border-top:1px solid #EBEBEB">',
         unsafe_allow_html=True,
     )
 

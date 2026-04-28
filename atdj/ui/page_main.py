@@ -576,9 +576,157 @@ def _section_chat():
         st.session_state["chat_msgs"].append(
             {"role": "user", "context": context, "content": msg_text.strip()}
         )
-        st.session_state["chat_msgs"].append(
-            {"role": "assistant", "content": CHAT_STUB}
-        )
+
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        from langchain_core.messages import HumanMessage
+        from atdj.config import GEMINI_MODEL, GOOGLE_API_KEY
+        _llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GOOGLE_API_KEY)
+        _classify = _llm.invoke([HumanMessage(content=f"""Is this message asking to plan/find/suggest music tracks for a tango session, or is it a general knowledge question?
+        Message: "{msg_text.strip()}"
+        Reply with only one word: PLAN or QUESTION""")])
+        is_planning = "PLAN" in _classify.content.upper()
+
+        if is_planning:
+            from atdj.agent.graph import build_graph
+            from atdj.schemas.session import MilongaSession
+            from datetime import datetime
+            import uuid
+
+            session = MilongaSession(
+                id=str(uuid.uuid4()),
+                name=msg_text.strip()[:50],
+                started_at=datetime.now(),
+                target_duration_minutes=60,
+            )
+            graph = build_graph()
+            initial_state = {
+                "messages": [], "session": session, "energy_arc": [],
+                "current_tanda_index": 0, "upcoming_tandas": [], "pending_feedback": [],
+                "needs_cortina": False, "session_complete": False, "feedback_pending": False,
+                "candidate_tracks": [], "current_tanda_draft": None, "last_agent_action": None,
+                "qa_question": None, "qa_answer": None, "error_message": None, "retry_count": 0,
+                "agent_log": [], "activity_log": [],
+            }
+            with st.spinner("🎵 Agent is planning your session..."):
+                for step in graph.stream(initial_state):
+                    node_name = list(step.keys())[0]
+                    state = step[node_name]
+                    if "activity_log" in state:
+                        if "activity_log" not in st.session_state:
+                            st.session_state["activity_log"] = []
+                        st.session_state["activity_log"].extend(state["activity_log"])
+
+            from atdj.rag.select_tanda import select_tanda as _select_tanda
+            from atdj.rag.prompt_to_features import build_translator, load_catalog
+
+            df = load_catalog("data/knowledge_base/rag_catalog.csv")
+            translator = build_translator(df, provider="gemini")
+            tanda_rules = {"tango": 4, "vals": 3, "milonga": 3}
+            user_prompt_lower = msg_text.strip().lower()
+            is_full_session = any(w in user_prompt_lower for w in ["full", "session", "milonga night", "complete", "tonight"])
+
+            if is_full_session:
+                session_plan = [
+                    (msg_text.strip() + ", warm opening, low energy", "tango"),
+                    ("vals from the 1940s, romantic and smooth", "vals"),
+                    ("tango from the 1940s, moderate energy", "tango"),
+                    ("milonga, fun and rhythmic", "milonga"),
+                    ("tango from the 1940s, energetic", "tango"),
+                    ("vals from the 1940s, elegant", "vals"),
+                    ("tango from the 1940s, dramatic and intense", "tango"),
+                    ("tango from the 1940s, gentle closing", "tango"),
+                ]
+            else:
+                detected_style = "tango"
+                for s in ["vals", "milonga", "tango"]:
+                    if s in user_prompt_lower:
+                        detected_style = s
+                        break
+                session_plan = [(msg_text.strip(), detected_style)]
+
+            new_playlist = []
+            tanda_idx = 0
+            for tanda_prompt, style in session_plan:
+                bundle = translator.translate(tanda_prompt)
+                result = _select_tanda(bundle, df)
+                if result and result.tanda:
+                    expected_count = tanda_rules.get(style, 4)
+                    tracks = result.tanda[:expected_count]
+                    for i, track in enumerate(tracks):
+                        new_playlist.append({
+                            "type": "song",
+                            "title": track.get("title", "Unknown"),
+                            "playing": tanda_idx == 0 and i == 0,
+                            "style": track.get("style", style).upper(),
+                            "orchestra": track.get("orchestra", ""),
+                            "singer": track.get("singer", "") if str(track.get("singer", "")) != "nan" else "",
+                            "year": int(track.get("year", 0)) if track.get("year") and str(track.get("year")) != "nan" else 0,
+                            "duration": str(int(track.get("duration_seconds", 0) // 60)) + ":" +
+                                    str(int(track.get("duration_seconds", 0) % 60)).zfill(2),
+                            "source": "agent",
+                            "tanda_id": tanda_idx,
+                        })
+                    if tanda_idx < len(session_plan) - 1:
+                        new_playlist.append({
+                            "type": "cortina", "title": "Cortina",
+                            "duration": "0:20", "source": "agent",
+                        })
+                    tanda_idx += 1
+
+            if new_playlist:
+                from atdj.playback.player import PlaybackQueue
+                existing = st.session_state.get("playlist", [])
+                st.session_state["playlist"] = existing + new_playlist
+                pq = PlaybackQueue(new_playlist)
+                st.session_state["pq_data"] = pq.to_session_state()
+
+                if st.session_state.get("auto_enhance", True):
+                    from atdj.audio.enhancement import enhance_tanda
+                    from atdj.config import PROCESSED_DIR
+                    from pathlib import Path
+                    track_paths = []
+                    for item in new_playlist:
+                        if item["type"] == "song":
+                            file_path = pq.resolve_file_path(item)
+                            if file_path:
+                                track_paths.append(Path(file_path))
+                    if track_paths:
+                        try:
+                            enhance_tanda(track_paths, Path(PROCESSED_DIR))
+                            st.session_state["agent_notifications"].append(
+                                {"type": "decision", "text": f"✓ Enhanced {len(track_paths)} tracks", "timestamp": ""}
+                            )
+                        except Exception as e:
+                            st.session_state["agent_notifications"].append(
+                                {"type": "warning", "text": f"Enhancement skipped: {e}", "timestamp": ""}
+                            )
+
+            songs = [t for t in new_playlist if t["type"] == "song"]
+            if songs:
+                orchestras = list(dict.fromkeys([s["orchestra"] for s in songs if s.get("orchestra")]))
+                styles = list(dict.fromkeys([s["style"] for s in songs if s.get("style")]))
+                summary = (
+                    f"✅ Done! I've planned **{len(songs)} tracks**.\n\n"
+                    f"**Orchestras:** {', '.join(orchestras[:4])}\n\n"
+                    f"**Styles:** {', '.join(styles)}\n\n"
+                    f"Check the **Full Playlist** on the left!"
+                )
+            else:
+                summary = "⚠️ Couldn't find enough tracks. Try a different prompt!"
+
+            st.session_state["chat_msgs"].append({"role": "assistant", "content": summary})
+
+        else:
+            from atdj.rag.query import answer_question
+            with st.spinner("Agent thinking..."):
+                try:
+                    response = answer_question(msg_text.strip())
+                    reply = response if isinstance(response, str) else str(response)
+                except Exception as e:
+                    reply = f"(Agent error: {e})"
+            st.session_state["chat_msgs"].append({"role": "assistant", "content": reply})
+
+        st.session_state["input_counter"] = st.session_state.get("input_counter", 0) + 1
         st.rerun()
 
 # ── Center column: Music ─────────────────────────────────────────────────────
@@ -1251,30 +1399,39 @@ def _section_log():
     st.markdown("#### Session Planning Log")
 
     if "agent_notifications" not in st.session_state:
-        st.session_state["agent_notifications"] = [
-            {"type": "info",    "text": "Session started — 8 tandas planned."},
-            {"type": "change",  "text": "Tanda 2 updated: switched from D'Arienzo to Canaro (warmer opening requested)."},
-            {"type": "info",    "text": "Crowd energy detected as moderate — vals tanda scheduled for tanda 3."},
-            {"type": "change",  "text": "Tanda 4 adjusted: D'Arienzo inserted after feedback 'more rhythm'."},
-            {"type": "change",  "text": "Tanda 5 set to Biagi by you — marked as hand-picked."},
-            {"type": "info",    "text": "Cortina after tanda 5 extended to 30s — floor transition detected."},
-            {"type": "change",  "text": "Tanda 6 swapped: Pugliese replaces Fresedo (user requested more drama)."},
-            {"type": "info",    "text": "Energy arc rising — milonga scheduled for tanda 7 to sustain momentum."},
-            {"type": "change",  "text": "Tanda 8 locked: Fresedo vals for cool-down close."},
-            {"type": "info",    "text": "All 8 tandas confirmed. Session map finalized."},
-        ]
+        st.session_state["agent_notifications"] = []
 
-    notif_colors = {"info": ("#E8F4FD", "#1A6FAD"), "change": ("#FEF9E7", "#B7770D")}
+    if "activity_log" in st.session_state:
+        for entry in st.session_state["activity_log"]:
+            notification = {
+                "type": entry.get("level", "info"),
+                "text": f"[{entry['node']}] {entry['message']}",
+                "timestamp": entry.get("timestamp", ""),
+            }
+            if notification not in st.session_state["agent_notifications"]:
+                st.session_state["agent_notifications"].append(notification)
+
+    level_colors = {
+        "info":     ("#E8F4FD", "#1A6FAD"),
+        "decision": ("#E8F8E8", "#2D8A4E"),
+        "warning":  ("#FEF9E7", "#B7770D"),
+        "error":    ("#FDE8E8", "#C44040"),
+    }
+
     log_container = st.container(height=220)
     with log_container:
-        for n in reversed(st.session_state["agent_notifications"]):
-            bg, clr = notif_colors.get(n["type"], ("#F7F7F7", "#555"))
-            st.markdown(
-                f'<div style="background:{bg};border-left:3px solid {clr};'
-                f'border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:5px;font-size:12px;color:#333">'
-                f'{n["text"]}</div>',
-                unsafe_allow_html=True,
-            )
+        if not st.session_state["agent_notifications"]:
+            st.caption("No activity yet — plan a session to see live updates here.")
+        else:
+            for n in reversed(st.session_state["agent_notifications"]):
+                bg, clr = level_colors.get(n["type"], ("#F7F7F7", "#555"))
+                timestamp = n.get("timestamp", "")[:19].replace("T", " ") if n.get("timestamp") else ""
+                st.markdown(
+                    f'<div style="background:{bg};border-left:3px solid {clr};'
+                    f'border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:5px;font-size:11px;color:#333">'
+                    f'<span style="color:#999;font-size:10px">{timestamp}</span> {n["text"]}</div>',
+                    unsafe_allow_html=True,
+                )
 
 # ── Bottom: Library, Queue, Upload ──────────────────────────────────────────
 

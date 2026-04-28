@@ -1,9 +1,17 @@
+import operator
 from typing import TypedDict, Annotated, Optional
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
 from atdj.schemas.session import MilongaSession
 from atdj.schemas.tanda import Tanda
 from atdj.schemas.feedback import FeedbackEvent
+
+
+class LogEntry(TypedDict):
+    timestamp: str
+    node: str
+    level: str    # "info" | "warning" | "error" | "decision"
+    message: str
 
 
 class AgentState(TypedDict):
@@ -23,3 +31,5 @@ class AgentState(TypedDict):
     qa_answer: Optional[str]
     error_message: Optional[str]
     retry_count: int
+    agent_log: list[str]
+    activity_log: Annotated[list[LogEntry], operator.add]

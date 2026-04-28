@@ -2,6 +2,8 @@ import pandas as pd
 import random
 from langchain_core.tools import tool
 from atdj.config import CATALOG_PATH
+from atdj.rag.select_tanda import select_tanda as _select_tanda
+from atdj.rag.prompt_to_features import build_translator, load_catalog
 
 
 def _load_catalog() -> pd.DataFrame:
@@ -54,6 +56,23 @@ def search_catalog(
 
     return selected.to_dict(orient="records")
 
+@tool
+def search_catalog_rag(
+    prompt: str,
+    csv_path: str = "data/reduced_catalog.csv",
+) -> list[dict]:
+    """Search catalog using RAG-powered tanda selection.
+    Takes a natural language prompt and returns the best matching tanda."""
+    try:
+        df = load_catalog(csv_path)
+        translator = build_translator(df, provider="gemini")
+        bundle = translator.translate(prompt)
+        result = _select_tanda(bundle, df)
+        if result and result.tanda:
+            return [t for t in result.tanda]
+        return []
+    except Exception as e:
+        return [{"error": str(e)}]
 
 @tool
 def validate_tanda(track_filenames: list[str]) -> dict:

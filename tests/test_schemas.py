@@ -1,7 +1,7 @@
 import pytest
 from atdj.schemas.track import Track, TangoStyle, AudioQuality
 from atdj.schemas.tanda import Tanda
-from atdj.schemas.session import MilongaSession
+from atdj.schemas.session import PlanSession
 from atdj.schemas.feedback import FeedbackEvent
 from datetime import datetime
 
@@ -127,16 +127,15 @@ def test_tanda_energy_out_of_range():
         )
 
 
-# --- MilongaSession ---
+# --- PlanSession ---
 
 def make_session(**overrides):
     base = dict(
         id="sess_001",
         name="Test Milonga",
-        started_at=datetime.now(),
     )
     base.update(overrides)
-    return MilongaSession(**base)
+    return PlanSession(**base)
 
 
 def test_session_planning_mode_default():

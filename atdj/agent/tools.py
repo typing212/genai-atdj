@@ -56,23 +56,52 @@ def search_catalog(
 
     return selected.to_dict(orient="records")
 
+# Original (Tina): hardcoded provider="gemini" and csv_path="data/reduced_catalog.csv".
+# Replaced below to honor the UI's provider selection and the REDUCED_CATALOG_PATH
+# config constant — see doc/changes_after_merge.md for context.
+# @tool
+# def search_catalog_rag(
+#     prompt: str,
+#     csv_path: str = "data/reduced_catalog.csv",
+# ) -> list[dict]:
+#     """Search catalog using RAG-powered tanda selection.
+#     Takes a natural language prompt and returns the best matching tanda."""
+#     try:
+#         df = load_catalog(csv_path)
+#         translator = build_translator(df, provider="gemini")
+#         bundle = translator.translate(prompt)
+#         result = _select_tanda(bundle, df)
+#         if result and result.tanda:
+#             return [t for t in result.tanda]
+#         return []
+#     except Exception as e:
+#         return [{"error": str(e)}]
+
+
 @tool
-def search_catalog_rag(
-    prompt: str,
-    csv_path: str = "data/reduced_catalog.csv",
-) -> list[dict]:
+def search_catalog_rag(prompt: str) -> list[dict]:
     """Search catalog using RAG-powered tanda selection.
     Takes a natural language prompt and returns the best matching tanda."""
+    from atdj.config import REDUCED_CATALOG_PATH, get_ui_provider, get_ui_api_key, get_ui_model
+    provider = get_ui_provider()
+    api_key = get_ui_api_key()
+    model = get_ui_model()
     try:
-        df = load_catalog(csv_path)
-        translator = build_translator(df, provider="gemini")
+        df = load_catalog(str(REDUCED_CATALOG_PATH))
+        translator = build_translator(
+            df, provider=provider.lower(),
+            api_key=api_key,
+            model_name=model,
+        )
         bundle = translator.translate(prompt)
         result = _select_tanda(bundle, df)
         if result and result.tanda:
             return [t for t in result.tanda]
         return []
     except Exception as e:
-        return [{"error": str(e)}]
+        # Include UI provider/key state so issues with session-state propagation
+        # are visible in the Session Log warning entry.
+        return [{"error": f"{e} [provider={provider!r}, model={model!r}, key_set={bool(api_key)}]"}]
 
 @tool
 def validate_tanda(track_filenames: list[str]) -> dict:

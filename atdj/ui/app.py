@@ -1,3 +1,9 @@
+import sys
+from pathlib import Path as _Path
+_project_root = str(_Path(__file__).parent.parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import streamlit as st
 from atdj.ui import page_main
 
@@ -149,4 +155,8 @@ def run_app():
     st.navigation(pages).run()
 
 
-run_app()
+# Removed 2026-04-29: this module-level call caused run_app() to fire on import,
+# AND main.py also calls run_app(), so the page rendered TWICE per script run —
+# producing intermittent StreamlitDuplicateElementKey errors on every keyed widget
+# (sb_provider, new_session, etc.). main.py is the canonical entry point.
+# run_app()

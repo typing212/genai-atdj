@@ -36,7 +36,7 @@ uv run pytest tests/ -v
 | Variable | What it's for |
 |---|---|
 | `LLM_PROVIDER` | `gemini` (default) \| `claude` \| `ollama` |
-| `GOOGLE_API_KEY` | Required if using Gemini |
+| `GEMINI_API_KEY` | Required if using Gemini (legacy `GOOGLE_API_KEY` accepted as fallback) |
 | `ANTHROPIC_API_KEY` | Required if using Claude |
 | `GEMINI_MODEL` | Default: `gemini-2.0-flash` |
 | `CLAUDE_MODEL` | Default: `claude-sonnet-4-6` |

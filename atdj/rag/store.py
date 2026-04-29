@@ -23,23 +23,32 @@ TRACKS_COLLECTION     = "tango_tracks"
 KNOWLEDGE_COLLECTION  = "domain_knowledge"
 
 
+# ── Singleton client — avoids reloading sentence-transformers on every rerun ──
+_chroma_client: chromadb.PersistentClient | None = None
+
+
 def get_client() -> chromadb.PersistentClient:
     """
-    Return a ChromaDB PersistentClient.
+    Return a singleton ChromaDB PersistentClient.
 
-    Data is stored in data/chroma_db/ so it survives restarts.
-    ChromaDB uses its own built-in embedding model (all-MiniLM-L6-v2)
-    by default — no API key needed.
-
-    Usage
-    -----
-    >>> client = get_client()
+    Created once per process and reused — avoids reloading sentence-transformers
+    on every Streamlit rerun. Data is stored in data/chroma_db/.
     """
-    CHROMA_DIR.mkdir(parents=True, exist_ok=True)
-    return chromadb.PersistentClient(
-        path=str(CHROMA_DIR),
-        settings=Settings(anonymized_telemetry=False),
-    )
+    # Original implementation (created a new client on every call):
+    # CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+    # return chromadb.PersistentClient(
+    #     path=str(CHROMA_DIR),
+    #     settings=Settings(anonymized_telemetry=False),
+    # )
+
+    global _chroma_client
+    if _chroma_client is None:
+        CHROMA_DIR.mkdir(parents=True, exist_ok=True)
+        _chroma_client = chromadb.PersistentClient(
+            path=str(CHROMA_DIR),
+            settings=Settings(anonymized_telemetry=False),
+        )
+    return _chroma_client
 
 
 def get_or_create_collection(

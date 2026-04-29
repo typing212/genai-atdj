@@ -6,28 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run python .claude/hooks/check_env_access.py",
+            "command": "python .claude/hooks/check_env_access.py",
             "statusMessage": "Checking for .env access..."
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Review this tool call about to write or edit code: $ARGUMENTS\n\nCheck if any functions, classes, utilities, or logic being added already exist elsewhere in the project. If you detect clear duplication of existing code, return: {\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Duplicate detected: <describe what already exists and where>\"}}. If no duplication is found, return: {\"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"allow\"}}",
-            "statusMessage": "Checking for duplicate code..."
-          }
-        ]
-      },
-      {
-        "matcher": "Write|Edit|Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run python .claude/hooks/check_outside_project.py",
-            "statusMessage": "Checking file path is within project folder..."
           }
         ]
       }

@@ -19,7 +19,9 @@ data/cortinas/*
 data/processed/*
 data/catalog.csv
 data/chroma_store/*
+data/chroma_db/*
 data/domain_knowledge/*
+data/log/*
 
 # Keep .gitkeep files so empty folders are tracked
 !data/raw/.gitkeep
@@ -28,6 +30,7 @@ data/domain_knowledge/*
 !data/processed/todotango_enriched.csv
 !data/chroma_store/.gitkeep
 !data/domain_knowledge/.gitkeep
+!data/log/.gitkeep
 
 # Keep the samples folder fully tracked (5 demo tracks for README onboarding)
 !data/samples/

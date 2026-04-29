@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from atdj.config import CATALOG_PATH, RAW_DIR, CORTINAS_DIR
+from atdj.config import CATALOG_PATH, RAW_DIR, CORTINAS_DIR, PROCESSED_DIR
 
 
 class PlaybackQueue:
@@ -85,10 +85,30 @@ class PlaybackQueue:
         if matches.empty:
             return None
         filename = matches.iloc[0]["filename"]
-        path = RAW_DIR / filename
-        if path.exists():
-            return str(path)
+        processed = PROCESSED_DIR / (Path(filename).stem + "_enhanced.wav")
+        if processed.exists():
+            return str(processed)
+        raw = RAW_DIR / filename
+        if raw.exists():
+            return str(raw)
         return None
+
+    def resolve_raw_path(self, item: dict) -> str | None:
+        """Always return the raw source path, ignoring any processed version."""
+        if item.get("type") == "cortina":
+            return None
+        df = self._load_catalog()
+        title = item.get("title", "")
+        mask = df["title"].str.lower() == title.lower()
+        orch = item.get("orchestra", "")
+        if orch:
+            mask = mask & (df["orchestra"].str.lower() == orch.lower())
+        matches = df[mask]
+        if matches.empty:
+            return None
+        filename = matches.iloc[0]["filename"]
+        path = RAW_DIR / filename
+        return str(path) if path.exists() else None
 
     def _resolve_cortina(self, item: dict) -> str | None:
         cortinas_path = Path(CORTINAS_DIR)

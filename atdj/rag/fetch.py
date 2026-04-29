@@ -33,7 +33,9 @@ The final answer is generated later in `query.py`, which can:
 import re
 import requests
 
-from atdj.config import KNOWLEDGE_DIR, GOOGLE_API_KEY, GEMINI_MODEL
+# Original import (hardcoded to config keys):
+# from atdj.config import KNOWLEDGE_DIR, GOOGLE_API_KEY, GEMINI_MODEL, ANTHROPIC_API_KEY, CLAUDE_MODEL
+from atdj.config import KNOWLEDGE_DIR, ANTHROPIC_API_KEY, CLAUDE_MODEL, get_ui_llm
 
 REQUEST_TIMEOUT = 5
 MAX_WIKI_CHARS = 3000
@@ -84,10 +86,12 @@ def _extract_lookup_query_with_gemini(query: str) -> str:
     from langchain_google_genai import ChatGoogleGenerativeAI
     from langchain_core.messages import HumanMessage
 
-    llm = ChatGoogleGenerativeAI(
-        model=GEMINI_MODEL,
-        google_api_key=GOOGLE_API_KEY,
-    )
+    # Original implementation (hardcoded to Gemini from config):
+    # llm = ChatGoogleGenerativeAI(
+    #     model=GEMINI_MODEL,
+    #     google_api_key=GOOGLE_API_KEY,
+    # )
+    llm = get_ui_llm()
 
     prompt = f"""You are helping a retrieval system choose a short lookup query.
 
@@ -135,8 +139,22 @@ def _normalize_query_for_lookup(query: str) -> str:
             return llm_query
     except Exception as exc:
         print(f"[fetch] Gemini query extraction failed for '{query}': {exc}")
+        try:
+            import anthropic as _anthropic
+            _client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+            _msg = _client.messages.create(
+                model=CLAUDE_MODEL, max_tokens=20,
+                messages=[{"role": "user", "content": f"Extract a ≤5-word retrieval query from: {query}\nReturn only the short query, no explanation."}]
+            )
+            _result = _normalize_text(_msg.content[0].text)
+            if _result:
+                return _result
+        except Exception as exc2:
+            print(f"[fetch] Claude fallback also failed for '{query}': {exc2}")
 
-    return cleaned
+    # Final fallback: keyword extraction — always ≤5 words, no LLM needed
+    keywords = _meaningful_tokens(cleaned)[:5]
+    return " ".join(keywords) if keywords else " ".join(cleaned.split()[:5])
 
 
 def _meaningful_tokens(text: str) -> list[str]:

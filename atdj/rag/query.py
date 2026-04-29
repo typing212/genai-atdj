@@ -40,7 +40,9 @@ AI-generated and not grounded in retrieved external knowledge.
 
 import re
 
-from atdj.config import GOOGLE_API_KEY, GEMINI_MODEL
+# Original import (hardcoded to config keys):
+# from atdj.config import GOOGLE_API_KEY, GEMINI_MODEL, ANTHROPIC_API_KEY, CLAUDE_MODEL
+from atdj.config import ANTHROPIC_API_KEY, CLAUDE_MODEL, get_ui_llm
 from atdj.rag.store import (
     get_client,
     get_or_create_collection,
@@ -55,13 +57,14 @@ load_dotenv()
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 def _get_llm():
-    """Create the default Gemini chat model used for answer generation."""
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    return ChatGoogleGenerativeAI(
-        model=GEMINI_MODEL,
-        google_api_key=GOOGLE_API_KEY,
-    )
+    """Return the LLM for the provider/key selected in the UI."""
+    # Original implementation (hardcoded to Gemini from config):
+    # from langchain_google_genai import ChatGoogleGenerativeAI
+    # return ChatGoogleGenerativeAI(
+    #     model=GEMINI_MODEL,
+    #     google_api_key=GOOGLE_API_KEY,
+    # )
+    return get_ui_llm()
 
 
 def _safe_first_nested(results: dict, key: str):
@@ -536,7 +539,15 @@ Source policy:
 ## Answer
 """
 
-    response = llm.invoke([HumanMessage(content=prompt)])
+    try:
+        response = llm.invoke([HumanMessage(content=prompt)])
+    except Exception as exc:
+        print(f"[query] Primary LLM failed: {exc}, trying Claude fallback...")
+        import anthropic as _anthropic
+        _client = _anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        _msg = _client.messages.create(model=CLAUDE_MODEL, max_tokens=1024,
+                                       messages=[{"role": "user", "content": prompt}])
+        response = type("R", (), {"content": _msg.content[0].text})()
     return response.content
 
 

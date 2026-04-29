@@ -127,7 +127,10 @@ def enhance_track(input_path: Path, output_path: Path | None = None, *,
                   noise_prop: float = 0.5,
                   eq_low_gain: float = 2.0,
                   eq_vocal_gain: float = 1.5,
-                  target_lufs: float = -14.0) -> dict:
+                  target_lufs: float = -14.0,
+                  highpass_hz: float = 80.0,
+                  limiter_threshold_db: float = -1.0,
+                  hiss_cutoff_override: float | None = None) -> dict:
     """Enhance a single track through the full pipeline.
 
     Pipeline: noise reduction → EQ → LUFS norm → limiter → dynamic hiss filter.
@@ -136,14 +139,14 @@ def enhance_track(input_path: Path, output_path: Path | None = None, *,
     audio, sr = librosa.load(str(input_path), sr=None, mono=True)
     snr_before = measure_snr(audio, sr)
     centroid_before = measure_spectral_centroid(audio, sr)
-    hiss_cutoff = find_music_cutoff(audio, sr)
+    hiss_cutoff = hiss_cutoff_override if hiss_cutoff_override is not None else find_music_cutoff(audio, sr)
 
     # Noise reduction
     audio = nr.reduce_noise(y=audio, sr=sr, prop_decrease=noise_prop, stationary=True)
 
     # EQ
     board_eq = pedalboard.Pedalboard([
-        pedalboard.HighpassFilter(cutoff_frequency_hz=80.0),
+        pedalboard.HighpassFilter(cutoff_frequency_hz=highpass_hz),
         pedalboard.LowShelfFilter(cutoff_frequency_hz=800.0, gain_db=eq_low_gain),
         pedalboard.PeakFilter(cutoff_frequency_hz=2000.0, gain_db=eq_vocal_gain, q=0.7),
     ])
@@ -156,7 +159,7 @@ def enhance_track(input_path: Path, output_path: Path | None = None, *,
 
     # Limiter + dynamic hiss filter (3x stacked for steep rolloff)
     board_final = pedalboard.Pedalboard([
-        pedalboard.Limiter(threshold_db=-1.0),
+        pedalboard.Limiter(threshold_db=limiter_threshold_db),
         pedalboard.LowpassFilter(cutoff_frequency_hz=hiss_cutoff),
         pedalboard.LowpassFilter(cutoff_frequency_hz=hiss_cutoff),
         pedalboard.LowpassFilter(cutoff_frequency_hz=hiss_cutoff),
@@ -186,10 +189,13 @@ def enhance_track(input_path: Path, output_path: Path | None = None, *,
     }
 
 
-def enhance_tanda(track_paths: list[Path], output_dir: Path) -> list[dict]:
+def enhance_tanda(track_paths: list[Path], output_dir: Path,
+                  param_overrides: list[dict] | None = None) -> list[dict]:
     """Adaptive enhancement for a group of tracks.
 
     Analyzes all tracks first, computes per-track adaptive params, then enhances each.
+    param_overrides is an optional per-track list of dicts whose keys override the
+    adaptive params (e.g. {"target_lufs": -12.5}). None or empty dict means fully adaptive.
     Returns a list of metrics dicts (one per track).
     """
     output_dir = Path(output_dir)
@@ -197,16 +203,22 @@ def enhance_tanda(track_paths: list[Path], output_dir: Path) -> list[dict]:
 
     profiles = analyze_tanda_tracks(track_paths)
     params_list, _ = compute_per_track_params(profiles)
+    padded = param_overrides if param_overrides else [{} for _ in track_paths]
 
     results = []
-    for profile, params in zip(profiles, params_list):
+    for profile, auto_params, overrides in zip(profiles, params_list, padded):
+        final_params = {**auto_params, **(overrides or {})}
         out_path = output_dir / (profile["name"] + "_enhanced.wav")
         metrics = enhance_track(
             profile["path"],
             out_path,
-            noise_prop=params["noise_prop"],
-            eq_low_gain=params["eq_low_gain"],
-            eq_vocal_gain=params["eq_vocal_gain"],
+            noise_prop=final_params["noise_prop"],
+            eq_low_gain=final_params["eq_low_gain"],
+            eq_vocal_gain=final_params["eq_vocal_gain"],
+            target_lufs=final_params.get("target_lufs", -14.0),
+            highpass_hz=final_params.get("highpass_hz", 80.0),
+            limiter_threshold_db=final_params.get("limiter_threshold_db", -1.0),
+            hiss_cutoff_override=final_params.get("hiss_cutoff_override"),
         )
         metrics["name"] = profile["name"]
         metrics["output_path"] = str(out_path)

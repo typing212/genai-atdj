@@ -4,6 +4,14 @@ Sidebar : session history (top) + inline settings (bottom).
 Main    : Agent Chat | Music Center | Agent Log
 Bottom  : Library / Queue / Upload
 """
+import sys
+from pathlib import Path as _Path
+# Ensure project root is on sys.path so 'atdj' is importable regardless of
+# how Streamlit is launched (venv direct, uv run, IDE runner, etc.)
+_project_root = str(_Path(__file__).parent.parent.parent)
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as st_components
@@ -25,36 +33,10 @@ NOW_PLAYING = {
     "singer": "Roberto Rufino", "style": "TANGO", "year": 1942,
     "progress": 0.35, "track_num": "2 / 3", "source": "agent",
 }
-QUEUE_STUB = [
-    {"type": "cortina", "title": "La Cumparsita (cortina cut)", "duration": "0:22"},
-    {"type": "tanda", "style": "VALS",    "orchestra": "Francisco Canaro", "singer": "Roberto Maida",       "decade": "1940s", "source": "agent",
-     "tracks": ["Desde El Alma", "Soñar y Nada Más", "Corazón de Oro"]},
-    {"type": "cortina", "title": "Poema (cortina cut)", "duration": "0:20"},
-    {"type": "tanda", "style": "MILONGA", "orchestra": "Aníbal Troilo",    "singer": "Francisco Fiorentino","decade": "1940s", "source": "agent",
-     "tracks": ["Milongueando En El 40", "Para Qué", "Che Papusa Oí"]},
-    {"type": "cortina", "title": "Recuerdo (cortina cut)", "duration": "0:18"},
-    {"type": "tanda", "style": "TANGO",   "orchestra": "Juan D'Arienzo",   "singer": "Alberto Echagüe",    "decade": "1930s", "source": "user",
-     "tracks": ["La Cumparsita", "El Choclo", "La Puñalada"]},
-]
 # Flat per-song playlist for the music center (replaces tanda-grouped structure)
-PLAYLIST_STUB = [
-    {"type":"song","title":"Al Compas De Un Tango","style":"TANGO",  "orchestra":"Ricardo Tanturi","singer":"Alberto Castillo","year":1942,"duration":"2:38","duration_seconds":158.34,"source":"agent","tanda_id":0},
-    {"type":"song","title":"Asi Se Canta",         "style":"TANGO",  "orchestra":"Ricardo Tanturi","singer":"Enrique Campos",  "year":1943,"duration":"3:10","duration_seconds":190.12,"source":"agent","tanda_id":0},
-    {"type":"song","title":"Comparsa Criolla",     "style":"TANGO",  "orchestra":"Ricardo Tanturi","singer":"Instrumental",    "year":1941,"duration":"2:51","duration_seconds":171.4, "source":"agent","tanda_id":0},
-    {"type":"cortina","title":"Good Luck, Babe!","duration":"0:20","source":"agent"},
-    {"type":"song","title":"Desde El Alma",        "style":"VALS",   "orchestra":"Francisco Canaro","singer":"Instrumental",   "year":1947,"duration":"3:00","duration_seconds":180.39,"source":"agent","tanda_id":1},
-    {"type":"song","title":"Vibraciones Del Alma", "style":"VALS",   "orchestra":"Francisco Canaro","singer":"Instrumental",   "year":0,   "duration":"3:02","duration_seconds":182.42,"source":"agent","tanda_id":1},
-    {"type":"song","title":"Francia",              "style":"VALS",   "orchestra":"Francisco Canaro","singer":"Instrumental",   "year":0,   "duration":"2:42","duration_seconds":162.43,"source":"agent","tanda_id":1},
-    {"type":"cortina","title":"Happy (Live)","duration":"0:20","source":"agent"},
-    {"type":"song","title":"Alas",                 "style":"MILONGA","orchestra":"Osvaldo Fresedo", "singer":"Ricardo Ruiz",    "year":0,   "duration":"2:29","duration_seconds":149.82,"source":"agent","tanda_id":2},
-    {"type":"song","title":"Chuzas",               "style":"MILONGA","orchestra":"Osvaldo Pugliese","singer":"Instrumental",    "year":1956,"duration":"3:08","duration_seconds":188.03,"source":"agent","tanda_id":2},
-]
+PLAYLIST_STUB = []
 TANDA_PALETTE = ["#8B1A1A", "#1A4E8B", "#1A6B2A", "#7B3F00", "#4A1A7B", "#1A6B6B"]
-ENERGY_STUB = {  # title → energy 0–1; used for the Energy Arc chart
-    "Al Compas De Un Tango": 0.45, "Asi Se Canta": 0.50, "Comparsa Criolla": 0.52,
-    "Desde El Alma": 0.38, "Vibraciones Del Alma": 0.40, "Francia": 0.42,
-    "Alas": 0.65, "Chuzas": 0.72,
-}
+ENERGY_STUB = {}
 
 CATALOG_COLS = ["title", "orchestra", "singer", "style", "year"]
 CATALOG_FALLBACK = [
@@ -84,14 +66,12 @@ PLANNING_DESCRIPTIONS = {
 }
 
 CHAT_STUB = "Got it — I'm still warming up. Connect me to the music pool for real responses. _(stub)_"
-CHAT_CONTEXTS = {"Any": "💬", "Feedback": "🎯", "Music Q": "🎵", "Plan": "📋"}
-
-SESSION_HISTORY = [
-    {"label": "Tonight · 2026-03-18", "duration": "0h 12m", "songs": 2},
-    {"label": "2026-03-15",           "duration": "3h 02m", "songs": 34},
-    {"label": "2026-03-10",           "duration": "2h 45m", "songs": 31},
-    {"label": "2026-03-01",           "duration": "1h 58m", "songs": 22},
-]
+CHAT_CONTEXTS = {
+    "Any":               "💬",
+    "Tanda Planning":    "📋",
+    "Q&A":               "🎵",
+    "Audio Enhancement": "🎛",
+}
 
 # ── Playback helpers ─────────────────────────────────────────────────────────
 # These are new helpers specific to this UI page — no equivalent exists elsewhere.
@@ -106,6 +86,15 @@ def _get_pq() -> PlaybackQueue:
 def _save_pq(pq: PlaybackQueue) -> None:
     st.session_state["pq_data"] = pq.to_session_state()
     st.session_state["playlist"] = pq.items
+
+
+def _log(text: str, kind: str = "info") -> None:
+    """Append a timestamped entry to the session log."""
+    import datetime
+    ts = datetime.datetime.now().strftime("%H:%M:%S")
+    st.session_state.setdefault("agent_notifications", []).append(
+        {"type": kind, "text": text, "timestamp": ts}
+    )
 
 
 # ── HTML helpers ─────────────────────────────────────────────────────────────
@@ -202,8 +191,39 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
 
     songs = [s for s in playlist if s["type"] == "song"]
     if not songs:
-        st.caption("No songs yet.")
+        st.markdown(
+            '<div style="background:#F9F9F9;border:1px dashed #DEDEDE;border-radius:8px;'
+            f'padding:16px;height:{EA_CHART_H}px;display:flex;flex-direction:column;'
+            'justify-content:center;align-items:center;text-align:center">'
+            '<p style="font-size:13px;color:#AAAAAA;margin:0 0 4px">No energy data yet</p>'
+            '<p style="font-size:12px;color:#BBBBBB;margin:0">Plan a session to see the energy arc</p>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
         return
+
+    # Normalize energy to [0, 1] using catalog min/max
+    # NOTE: must use the RAG catalog (reduced_catalog.csv) — that's the catalog the planner
+    # pulls track-level `energy` from, and `_load_catalog()` returns the playback catalog
+    # with no `energy` column, which silently fell through to a wrong fallback range.
+    try:
+        cat = _get_rag_catalog()
+        e_vals = cat["energy"].dropna().astype(float)
+        e_min, e_max = float(e_vals.min()), float(e_vals.max())
+    except Exception:
+        e_min, e_max = 0.0, 1.0
+
+    def _norm_energy(s: dict) -> tuple[float, bool]:
+        """Return (normalised 0-1 value, has_real_energy)."""
+        raw = s.get("energy")
+        if raw is not None:
+            try:
+                v = float(raw)
+                norm = (v - e_min) / (e_max - e_min) if e_max > e_min else 0.5
+                return norm, True
+            except (ValueError, TypeError):
+                pass
+        return 0.5, False   # unknown → mid-point, flagged as estimated
 
     # Map playlist-level current_index to song-only index
     song_indices = [i for i, s in enumerate(playlist) if s["type"] == "song"]
@@ -215,16 +235,18 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
     records = []
     for idx, s in enumerate(songs):
         decade = f"{(int(s['year']) // 10) * 10}s" if s.get("year") else "—"
+        energy_val, has_energy = _norm_energy(s)
         base_rec = {
-            "pos":       idx,
-            "title":     s["title"],
-            "orchestra": s["orchestra"],
-            "singer":    s.get("singer", "—") or "—",
-            "style":     s["style"],
-            "decade":    decade,
-            "source":    "💡 Agent" if s.get("source") == "agent" else "👤 You",
-            "energy":    ENERGY_STUB.get(s["title"], 0.40 + 0.08 * (idx % 6)),
-            "segment":   "played" if idx <= playing_pos else "planned",
+            "pos":        idx,
+            "title":      s["title"],
+            "orchestra":  s["orchestra"],
+            "singer":     s.get("singer", "—") or "—",
+            "style":      s["style"],
+            "decade":     decade,
+            "source":     "💡 Agent" if s.get("source") == "agent" else "👤 You",
+            "energy":     energy_val,
+            "has_energy": has_energy,
+            "segment":    "played" if idx <= playing_pos else "planned",
         }
         records.append(base_rec)
         if idx == playing_pos:
@@ -253,13 +275,23 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
                                   strokeDash=[5, 4]).transform_filter(
         alt.datum.segment == "planned"
     )
-    dots = base.mark_circle(size=55, opacity=0.9).encode(
+    # Known-energy tracks: filled circle; unknown: hollow square at 50%
+    dots_known = base.mark_circle(size=55, opacity=0.9).transform_filter(
+        alt.datum.has_energy == True
+    ).encode(
         color=alt.condition(
             alt.datum.segment == "played",
             alt.value("#1A5294"),
             alt.value("#BBBBBB"),
         )
     )
+    dots_unknown = base.mark_point(size=50, shape="square", filled=False,
+                                   opacity=0.5, strokeWidth=1.5).transform_filter(
+        alt.datum.has_energy == False
+    ).encode(
+        color=alt.value("#BBBBBB")
+    )
+    dots = dots_known + dots_unknown
     st.altair_chart(
         (played_line + planned_line + dots)
         .properties(height=EA_CHART_H)
@@ -270,6 +302,7 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
 
 # ── Data helpers ─────────────────────────────────────────────────────────────
 
+@st.cache_data(show_spinner=False)
 def _load_catalog() -> pd.DataFrame:
     try:
         df = pd.read_csv(CATALOG_PATH)
@@ -284,6 +317,23 @@ def _load_catalog() -> pd.DataFrame:
         pass
     return pd.DataFrame(CATALOG_FALLBACK)[CATALOG_COLS]
 
+@st.cache_data(show_spinner=False)
+def _get_rag_catalog():
+    """Load the labeled RAG catalog (with *_label columns required by the translator/selector)."""
+    from atdj.rag.prompt_to_features import load_catalog
+    from atdj.config import REDUCED_CATALOG_PATH
+    return load_catalog(str(REDUCED_CATALOG_PATH))
+
+
+@st.cache_resource(show_spinner=False)
+def _get_rag_translator(provider: str):
+    """Build the RAG translator once per (process, provider) and reuse it."""
+    from atdj.rag.prompt_to_features import build_translator, load_catalog
+    from atdj.config import REDUCED_CATALOG_PATH
+    df = load_catalog(str(REDUCED_CATALOG_PATH))
+    return build_translator(df, provider=provider)
+
+
 # ── Settings helpers ─────────────────────────────────────────────────────────
 
 def _init_settings():
@@ -292,7 +342,7 @@ def _init_settings():
     pm = {"claude": "Claude", "gemini": "Gemini", "ollama": "Ollama"}
     st.session_state["s_provider"] = pm.get(cfg.LLM_PROVIDER, "Claude")
     st.session_state["s_model"]    = cfg.CLAUDE_MODEL
-    st.session_state["s_api_key"]  = cfg.ANTHROPIC_API_KEY or ""
+    st.session_state["s_api_key"]  = ""
     st.session_state["s_planning"] = "convention"
     st.session_state["settings_initialized"] = True
 
@@ -300,181 +350,22 @@ def _init_settings():
 
 def _sidebar():
     with st.sidebar:
-
-        # ── Sessions ──────────────────────────────────────────────────────────
         st.markdown(
             """<style>
-            /* ── Compact icon buttons in sidebar ── */
+            /* Compact buttons in the sidebar */
             section[data-testid="stSidebar"] div[data-testid="stButton"] button {
-                height: 24px !important;
-                min-height: 24px !important;
-                max-height: 24px !important;
-                width: 100% !important;
-                padding: 0 6px !important;
-                line-height: 1 !important;
                 font-size: 12px !important;
                 border-radius: 4px !important;
             }
-            section[data-testid="stSidebar"] div[data-testid="stButton"] button > div {
-                display: flex !important;
-                align-items: center !important;
-                justify-content: center !important;
-                padding: 0 !important;
-            }
-            section[data-testid="stSidebar"] div[data-testid="stButton"] button p {
-                margin: 0 !important;
-                padding: 0 !important;
-                line-height: 1 !important;
-                font-size: 12px !important;
-            }
-            /* ── Session scroll buttons: 4 attrs beats music-section 3 attrs, match card height ── */
-            section[data-testid="stSidebar"] [data-testid="stLayoutWrapper"]
-                [data-testid="stVerticalBlock"] div[data-testid="stButton"] button {
-                height: 26px !important;
-                min-height: 26px !important;
-                max-height: 26px !important;
-            }
-            /* ── Push session buttons down to align with card center ── */
-            section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] div[data-testid="stButton"] {
-                margin-top: 13px !important; margin-bottom: 0 !important;
-            }
-            /* ── Shrink gap + padding in session scroll container ── */
-            section[data-testid="stSidebar"] [data-testid="stLayoutWrapper"]
-                > [data-testid="stVerticalBlock"] {
-                gap: 2px !important;
-                padding: 4px !important;
-            }
-            /* ── Shrink gap between the two buttons in btns_col ── */
-            section[data-testid="stSidebar"] [data-testid="stLayoutWrapper"]
-                [data-testid="stHorizontalBlock"] [data-testid="stHorizontalBlock"] {
-                gap: 1px !important;
-            }
-            /* ── Vertically center all sidebar horizontal rows ── */
+            /* Vertically center sidebar horizontal rows (provider+model selectboxes) */
             section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
                 align-items: center !important;
-            }
-            section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]
-                > [data-testid="stColumn"] {
-                align-self: center !important;
-                display: flex !important;
-                flex-direction: column !important;
-                justify-content: center !important;
             }
             </style>""",
             unsafe_allow_html=True,
         )
-        hdr_col, plus_col = st.columns([5, 1], vertical_alignment="center")
-        with hdr_col:
-            st.markdown('<p style="font-size:13px;font-weight:600;margin:0">Sessions</p>', unsafe_allow_html=True)
-        with plus_col:
-            if st.button("＋", key="new_session", help="New session", use_container_width=True):
-                import datetime
-                sessions = st.session_state.setdefault("sessions", list(SESSION_HISTORY))
-                new = {
-                    "label": datetime.date.today().strftime("%Y-%m-%d") + " (new)",
-                    "duration": "0h 00m", "tandas": 0, "active": False,
-                }
-                sessions.insert(0, new)
-                st.session_state["sessions"] = sessions
-                st.session_state["active_session"] = 0
-                st.rerun()
-
-        sessions = st.session_state.setdefault("sessions", list(SESSION_HISTORY))
-
-        if "active_session" not in st.session_state:
-            st.session_state["active_session"] = 0
-        if "renaming_session" not in st.session_state:
-            st.session_state["renaming_session"] = None
-
-        session_scroll = st.container(height=200)
-        with session_scroll:
-            for i, s in enumerate(sessions):
-                is_active   = st.session_state["active_session"] == i
-                is_renaming = st.session_state["renaming_session"] == i
-
-                if is_renaming:
-                    new_name = st.text_input(
-                        "Rename", value=s["label"],
-                        key=f"rename_input_{i}", label_visibility="collapsed",
-                    )
-                    save_col, cancel_col = st.columns(2)
-                    with save_col:
-                        if st.button("Save", key=f"rename_save_{i}", use_container_width=True):
-                            sessions[i]["label"] = new_name
-                            st.session_state["sessions"] = sessions
-                            st.session_state["renaming_session"] = None
-                            st.rerun()
-                    with cancel_col:
-                        if st.button("Cancel", key=f"rename_cancel_{i}", use_container_width=True):
-                            st.session_state["renaming_session"] = None
-                            st.rerun()
-
-                elif is_active:
-                    card_col, btns_col = st.columns([6, 1])
-                    songs = s.get("songs", 0)
-                    with card_col:
-                        st.markdown(
-                            f'<div style="display:flex;align-items:center;gap:6px;'
-                            f'padding:5px 8px;border-radius:4px;'
-                            f'background:#EEF4FB;border:1px solid #C5D9EE;border-left:3px solid #1A5294;'
-                            f'overflow:hidden">'
-                            f'<span style="font-size:12px;font-weight:700;color:#1A5294;'
-                            f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 0;line-height:1.3">'
-                            f'{s["label"]}</span>'
-                            f'<span style="font-size:10px;color:#7A9EC0;white-space:nowrap;flex-shrink:0;line-height:1.3">'
-                            f'{s["duration"]} · {songs} songs</span>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                    with btns_col:
-                        b1, b2 = st.columns(2)
-                        with b1:
-                            if st.button("✎", key=f"rename_{i}", help="Rename", use_container_width=True):
-                                st.session_state["renaming_session"] = i
-                                st.rerun()
-                        with b2:
-                            if st.button("x", key=f"del_{i}", help="Delete", use_container_width=True):
-                                sessions.pop(i)
-                                st.session_state["sessions"] = sessions
-                                st.session_state["active_session"] = min(i, max(0, len(sessions) - 1))
-                                st.rerun()
-
-                else:
-                    card_col, btns_col = st.columns([6, 1])
-                    songs = s.get("songs", 0)
-                    with card_col:
-                        st.markdown(
-                            f'<div style="display:flex;align-items:center;gap:6px;'
-                            f'padding:5px 8px;border-radius:4px;'
-                            f'background:#FFFFFF;border:1px solid #E0E0E0;border-left:3px solid #BBBBBB;'
-                            f'overflow:hidden">'
-                            f'<span style="font-size:12px;font-weight:700;color:#333;'
-                            f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 0;line-height:1.3">'
-                            f'{s["label"]}</span>'
-                            f'<span style="font-size:10px;color:#999;white-space:nowrap;flex-shrink:0;line-height:1.3">'
-                            f'{s["duration"]} · {songs} songs</span>'
-                            f'</div>',
-                            unsafe_allow_html=True,
-                        )
-                    with btns_col:
-                        b1, b2 = st.columns(2)
-                        with b1:
-                            if st.button("▷", key=f"sel_{i}", help="Open session", use_container_width=True):
-                                st.session_state["active_session"] = i
-                                st.toast(f"Loaded: {s['label']}", icon="📂")
-                                st.rerun()
-                        with b2:
-                            if st.button("x", key=f"del_{i}", help="Delete", use_container_width=True):
-                                sessions.pop(i)
-                                st.session_state["sessions"] = sessions
-                                new_active = st.session_state["active_session"]
-                                if new_active >= len(sessions):
-                                    new_active = max(0, len(sessions) - 1)
-                                st.session_state["active_session"] = new_active
-                                st.rerun()
 
         # ── Settings ──────────────────────────────────────────────────────────
-        st.divider()
         st.caption("⚙ Settings")
         _init_settings()
 
@@ -527,8 +418,7 @@ def _section_chat():
 
     if "chat_msgs" not in st.session_state:
         st.session_state["chat_msgs"] = [
-            {"role": "user",      "context": "Any", "content": "What style should we open with tonight?"},
-            {"role": "assistant", "content": "For a cold room, I'd start with a rhythmic D'Arienzo tango set to warm things up — then introduce vals after you see the floor respond. _(stub)_"},
+            {"role": "assistant", "content": "Hello! I'm your **A**rgentina **T**ango DJ — or just call me **@DJ**. How would you like to start this session?"},
         ]
 
     # Chat history — scrollable
@@ -544,9 +434,10 @@ def _section_chat():
     # Unified input card (Claude-style)
     with st.container(border=True):
         st.markdown('<div id="chat-input-card"></div>', unsafe_allow_html=True)
+        _input_key = f"chat_text_input_{st.session_state.get('input_counter', 0)}"
         msg_text = st.text_area(
             "Message", placeholder="Message the agent…",
-            label_visibility="collapsed", key="chat_text_input",
+            label_visibility="collapsed", key=_input_key,
             height=87,
         )
         ctx_col, mode_col, send_col = st.columns([3, 3, 1])
@@ -573,160 +464,292 @@ def _section_chat():
             send = st.button("➤", use_container_width=True, key="chat_send", help="Send")
 
     if send and msg_text.strip():
+        # Stash + rerun so the input clears before the long agent call
+        st.session_state["_pending_chat_msg"] = {"text": msg_text.strip(), "context": context}
+        st.session_state["input_counter"] = st.session_state.get("input_counter", 0) + 1
+        st.session_state.pop(_input_key, None)
+        st.rerun()
+
+    _pending = st.session_state.pop("_pending_chat_msg", None)
+    if _pending:
+        msg_text = _pending["text"]
+        context = _pending["context"]
         st.session_state["chat_msgs"].append(
             {"role": "user", "context": context, "content": msg_text.strip()}
         )
 
-        from langchain_google_genai import ChatGoogleGenerativeAI
+        # Show the new user message and a reply slot inside the chat container
+        with chat_container:
+            with st.chat_message("user", avatar="👤"):
+                if context != "Any":
+                    st.caption(f"{CHAT_CONTEXTS.get(context, '')} {context}")
+                st.markdown(msg_text.strip())
+            with st.chat_message("assistant", avatar="💡"):
+                _reply_slot = st.empty()
+                _reply_slot.markdown("_Working on it..._")
+
         from langchain_core.messages import HumanMessage
-        from atdj.config import GEMINI_MODEL, GOOGLE_API_KEY
-        _llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL, google_api_key=GOOGLE_API_KEY)
-        _classify = _llm.invoke([HumanMessage(content=f"""Is this message asking to plan/find/suggest music tracks for a tango session, or is it a general knowledge question?
-        Message: "{msg_text.strip()}"
-        Reply with only one word: PLAN or QUESTION""")])
-        is_planning = "PLAN" in _classify.content.upper()
+        from atdj.config import get_ui_llm
+
+        if context == "Tanda Planning":
+            is_planning, is_audio_adjust = True, False
+        elif context == "Q&A":
+            is_planning, is_audio_adjust = False, False
+        elif context == "Audio Enhancement":
+            is_planning, is_audio_adjust = False, True
+        else:
+            try:
+                _llm = get_ui_llm()
+                _classify = _llm.invoke([HumanMessage(content=f"""Classify into exactly one category:
+PLAN: plan/find/suggest/change music tracks or playlist
+ADJUST_AUDIO: audio quality changes (too quiet, too loud, too harsh, more bass, noisy, back to default, use original, reset audio, undo changes)
+QUESTION: tango knowledge (history, orchestras, styles)
+Message: "{msg_text.strip()}"
+Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
+                label = _classify.content.strip().upper()
+                is_planning = "PLAN" in label
+                is_audio_adjust = "ADJUST_AUDIO" in label
+            except Exception as _ce:
+                _reply_slot.markdown(f"_(Classifier error: {_ce}. Treating as Q&A.)_")
+                is_planning, is_audio_adjust = False, False
 
         if is_planning:
-            from atdj.agent.graph import build_graph
-            from atdj.schemas.session import MilongaSession
-            from datetime import datetime
-            import uuid
+            _reply_slot.markdown("_Planning your session..._")
+            if True:
+                from atdj.agent.graph import build_graph
+                from atdj.schemas.session import PlanSession
+                from datetime import datetime
+                import uuid
 
-            session = MilongaSession(
-                id=str(uuid.uuid4()),
-                name=msg_text.strip()[:50],
-                started_at=datetime.now(),
-                target_duration_minutes=60,
-            )
-            graph = build_graph()
-            initial_state = {
-                "messages": [], "session": session, "energy_arc": [],
-                "current_tanda_index": 0, "upcoming_tandas": [], "pending_feedback": [],
-                "needs_cortina": False, "session_complete": False, "feedback_pending": False,
-                "candidate_tracks": [], "current_tanda_draft": None, "last_agent_action": None,
-                "qa_question": None, "qa_answer": None, "error_message": None, "retry_count": 0,
-                "agent_log": [], "activity_log": [],
-            }
-            with st.spinner("🎵 Agent is planning your session..."):
-                for step in graph.stream(initial_state):
-                    node_name = list(step.keys())[0]
-                    state = step[node_name]
-                    if "activity_log" in state:
-                        if "activity_log" not in st.session_state:
-                            st.session_state["activity_log"] = []
-                        st.session_state["activity_log"].extend(state["activity_log"])
+                # Build the per-tanda plan FIRST so the graph can be told how many
+                # tandas to run and what prompt to use for each one.
+                user_prompt_lower = msg_text.strip().lower()
+                is_full_session = any(w in user_prompt_lower for w in ["full", "session", "milonga night", "complete", "tonight"])
+                if is_full_session:
+                    session_plan = [
+                        (msg_text.strip() + ", warm opening, low energy", "tango"),
+                        ("vals from the 1940s, romantic and smooth", "vals"),
+                        ("tango from the 1940s, moderate energy", "tango"),
+                        ("milonga, fun and rhythmic", "milonga"),
+                        ("tango from the 1940s, energetic", "tango"),
+                        ("vals from the 1940s, elegant", "vals"),
+                        ("tango from the 1940s, dramatic and intense", "tango"),
+                        ("tango from the 1940s, gentle closing", "tango"),
+                    ]
+                else:
+                    detected_style = "tango"
+                    for s in ["vals", "milonga", "tango"]:
+                        if s in user_prompt_lower:
+                            detected_style = s
+                            break
+                    session_plan = [(msg_text.strip(), detected_style)]
 
-            from atdj.rag.select_tanda import select_tanda as _select_tanda
-            from atdj.rag.prompt_to_features import build_translator, load_catalog
+                session = PlanSession(
+                    id=str(uuid.uuid4()),
+                    name=msg_text.strip()[:50],
+                )
+                graph = build_graph()
+                initial_state = {
+                    "messages": [], "session": session,
+                    "current_tanda_index": 0, "upcoming_tandas": [], "pending_feedback": [],
+                    "needs_cortina": False, "session_complete": False, "feedback_pending": False,
+                    "candidate_tracks": [], "current_tanda_draft": None, "last_agent_action": None,
+                    "qa_question": None, "qa_answer": None, "error_message": None, "retry_count": 0,
+                    "agent_log": [], "activity_log": [],
+                    "session_plan": session_plan,
+                    "picked_tracks": [],
+                }
+                final_state = graph.invoke(initial_state)
 
-            df = load_catalog("data/knowledge_base/rag_catalog.csv")
-            translator = build_translator(df, provider="gemini")
-            tanda_rules = {"tango": 4, "vals": 3, "milonga": 3}
-            user_prompt_lower = msg_text.strip().lower()
-            is_full_session = any(w in user_prompt_lower for w in ["full", "session", "milonga night", "complete", "tonight"])
+                # Hand the per-node log entries off to the Session Log panel.
+                for entry in final_state.get("activity_log", []):
+                    st.session_state.setdefault("activity_log", []).append(entry)
 
-            if is_full_session:
-                session_plan = [
-                    (msg_text.strip() + ", warm opening, low energy", "tango"),
-                    ("vals from the 1940s, romantic and smooth", "vals"),
-                    ("tango from the 1940s, moderate energy", "tango"),
-                    ("milonga, fun and rhythmic", "milonga"),
-                    ("tango from the 1940s, energetic", "tango"),
-                    ("vals from the 1940s, elegant", "vals"),
-                    ("tango from the 1940s, dramatic and intense", "tango"),
-                    ("tango from the 1940s, gentle closing", "tango"),
-                ]
-            else:
-                detected_style = "tango"
-                for s in ["vals", "milonga", "tango"]:
-                    if s in user_prompt_lower:
-                        detected_style = s
-                        break
-                session_plan = [(msg_text.strip(), detected_style)]
+                # Original parallel selection loop kept below (commented) for reference.
+                # Replaced by tanda_planner, which now calls search_catalog_rag itself
+                # and writes the chosen tracks into state["picked_tracks"].
+                # from atdj.rag.select_tanda import select_tanda as _select_tanda
+                # from atdj.rag.prompt_to_features import build_translator, load_catalog
+                # from atdj.config import RAG_CATALOG_PATH
+                # df = _get_rag_catalog()
+                # translator = _get_rag_translator(
+                #     st.session_state.get("s_provider", "Claude").lower()
+                # )
+                # tanda_rules = {"tango": 4, "vals": 3, "milonga": 3}
+                # new_playlist = []
+                # tanda_idx = 0
+                # for tanda_prompt, style in session_plan:
+                #     bundle = translator.translate(tanda_prompt)
+                #     result = _select_tanda(bundle, df)
+                #     if result and result.tanda:
+                #         expected_count = tanda_rules.get(style, 4)
+                #         tracks = result.tanda[:expected_count]
+                #         for i, track in enumerate(tracks):
+                #             new_playlist.append({...})
+                #         if tanda_idx < len(session_plan) - 1:
+                #             new_playlist.append({"type": "cortina", ...})
+                #         tanda_idx += 1
 
-            new_playlist = []
-            tanda_idx = 0
-            for tanda_prompt, style in session_plan:
-                bundle = translator.translate(tanda_prompt)
-                result = _select_tanda(bundle, df)
-                if result and result.tanda:
-                    expected_count = tanda_rules.get(style, 4)
-                    tracks = result.tanda[:expected_count]
-                    for i, track in enumerate(tracks):
+                new_playlist = []
+                picked_per_tanda = final_state.get("picked_tracks") or []
+                for tanda_idx, tanda_tracks in enumerate(picked_per_tanda):
+                    if not tanda_tracks:
+                        continue
+                    style_for_tanda = (
+                        session_plan[tanda_idx][1] if tanda_idx < len(session_plan) else "tango"
+                    )
+                    for i, track in enumerate(tanda_tracks):
                         new_playlist.append({
                             "type": "song",
                             "title": track.get("title", "Unknown"),
                             "playing": tanda_idx == 0 and i == 0,
-                            "style": track.get("style", style).upper(),
+                            "style": str(track.get("style", style_for_tanda)).upper(),
                             "orchestra": track.get("orchestra", ""),
                             "singer": track.get("singer", "") if str(track.get("singer", "")) != "nan" else "",
                             "year": int(track.get("year", 0)) if track.get("year") and str(track.get("year")) != "nan" else 0,
                             "duration": str(int(track.get("duration_seconds", 0) // 60)) + ":" +
                                     str(int(track.get("duration_seconds", 0) % 60)).zfill(2),
+                            "energy": track.get("energy"),
                             "source": "agent",
                             "tanda_id": tanda_idx,
                         })
-                    if tanda_idx < len(session_plan) - 1:
+                    if tanda_idx < len(picked_per_tanda) - 1:
                         new_playlist.append({
                             "type": "cortina", "title": "Cortina",
                             "duration": "0:20", "source": "agent",
                         })
-                    tanda_idx += 1
 
-            if new_playlist:
-                from atdj.playback.player import PlaybackQueue
-                existing = st.session_state.get("playlist", [])
-                st.session_state["playlist"] = existing + new_playlist
-                pq = PlaybackQueue(new_playlist)
-                st.session_state["pq_data"] = pq.to_session_state()
+                if new_playlist:
+                    # Append to the existing queue instead of overwriting it,
+                    # so successive plans stack rather than replacing the previous tanda.
+                    pq = _get_pq()
+                    pq.items.extend(new_playlist)
+                    _save_pq(pq)
 
-                if st.session_state.get("auto_enhance", True):
-                    from atdj.audio.enhancement import enhance_tanda
-                    from atdj.config import PROCESSED_DIR
-                    from pathlib import Path
-                    track_paths = []
-                    for item in new_playlist:
-                        if item["type"] == "song":
-                            file_path = pq.resolve_file_path(item)
-                            if file_path:
-                                track_paths.append(Path(file_path))
-                    if track_paths:
-                        try:
-                            enhance_tanda(track_paths, Path(PROCESSED_DIR))
-                            st.session_state["agent_notifications"].append(
-                                {"type": "decision", "text": f"✓ Enhanced {len(track_paths)} tracks", "timestamp": ""}
-                            )
-                        except Exception as e:
-                            st.session_state["agent_notifications"].append(
-                                {"type": "warning", "text": f"Enhancement skipped: {e}", "timestamp": ""}
-                            )
+                    if st.session_state.get("auto_enhance", False):
+                        from atdj.audio.enhancement import enhance_tanda
+                        from atdj.audio.adjustment_graph import compute_intent_overrides
+                        from atdj.config import PROCESSED_DIR
+                        from pathlib import Path
+                        track_paths = []
+                        for item in new_playlist:
+                            if item["type"] == "song":
+                                raw_path = pq.resolve_raw_path(item)
+                                if raw_path:
+                                    track_paths.append(Path(raw_path))
+                        if track_paths:
+                            try:
+                                stored_intent = st.session_state.get("stored_adjustment_intent")
+                                overrides = (
+                                    compute_intent_overrides(stored_intent, len(track_paths))
+                                    if stored_intent else None
+                                )
+                                enhance_tanda(track_paths, Path(PROCESSED_DIR), param_overrides=overrides)
+                                st.session_state.setdefault("agent_notifications", []).append(
+                                    {"type": "decision", "text": f"Enhanced {len(track_paths)} tracks", "timestamp": ""}
+                                )
+                            except Exception as e:
+                                st.session_state.setdefault("agent_notifications", []).append(
+                                    {"type": "warning", "text": f"Enhancement skipped: {e}", "timestamp": ""}
+                                )
 
-            songs = [t for t in new_playlist if t["type"] == "song"]
-            if songs:
-                orchestras = list(dict.fromkeys([s["orchestra"] for s in songs if s.get("orchestra")]))
-                styles = list(dict.fromkeys([s["style"] for s in songs if s.get("style")]))
-                summary = (
-                    f"✅ Done! I've planned **{len(songs)} tracks**.\n\n"
-                    f"**Orchestras:** {', '.join(orchestras[:4])}\n\n"
-                    f"**Styles:** {', '.join(styles)}\n\n"
-                    f"Check the **Full Playlist** on the left!"
-                )
-            else:
-                summary = "⚠️ Couldn't find enough tracks. Try a different prompt!"
+                songs = [t for t in new_playlist if t["type"] == "song"]
+                if songs:
+                    orchestras = list(dict.fromkeys([s["orchestra"] for s in songs if s.get("orchestra")]))
+                    styles = list(dict.fromkeys([s["style"] for s in songs if s.get("style")]))
+                    summary = (
+                        f"✅ Done! I've planned **{len(songs)} tracks**.\n\n"
+                        f"**Orchestras:** {', '.join(orchestras[:4])}\n\n"
+                        f"**Styles:** {', '.join(styles)}\n\n"
+                        f"Check the **Full Playlist** on the left!"
+                    )
+                else:
+                    summary = "⚠️ Couldn't find enough tracks. Try a different prompt!"
 
+            _reply_slot.markdown(summary)
             st.session_state["chat_msgs"].append({"role": "assistant", "content": summary})
+
+        elif is_audio_adjust:
+            from atdj.audio.adjustment_graph import build_adjustment_graph, AdjustmentState
+            from atdj.config import PROCESSED_DIR
+
+            pq = _get_pq()
+            resolved_paths = {}
+            for i, item in enumerate(pq.items):
+                if item.get("type") == "song":
+                    rp = pq.resolve_raw_path(item)
+                    if rp:
+                        resolved_paths[i] = rp
+
+            pending = st.session_state.pop("pending_adjustment", None)
+            if pending:
+                initial = {
+                    **pending,
+                    "user_message": msg_text.strip(),
+                    "needs_clarification": False,
+                    "rejected": False,
+                }
+            else:
+                initial = {
+                    "user_message": msg_text.strip(),
+                    "playlist": pq.items,
+                    "current_index": pq.current_index,
+                    "auto_enhance_on": st.session_state.get("auto_enhance", False),
+                    "output_dir": str(PROCESSED_DIR),
+                    "resolved_paths": resolved_paths,
+                    "scope": None, "feature": None, "direction": None,
+                    "magnitude": None, "target_name": None,
+                    "needs_clarification": False,
+                    "clarification_question": "",
+                    "clarification_options": [],
+                    "rejected": False,
+                    "rejection_options": [],
+                    "target_indices": [],
+                    "reference_params": None,
+                    "computed_overrides": [],
+                    "execution_results": [],
+                    "store_intent": False,
+                    "intent_to_store": None,
+                    "reply": "",
+                    "activity_log": [],
+                }
+
+            adj_graph = build_adjustment_graph()
+            _reply_slot.markdown("_Analyzing and enhancing audio..._")
+            final = adj_graph.invoke(initial)
+
+            if final.get("needs_clarification") or final.get("rejected"):
+                st.session_state["pending_adjustment"] = {
+                    k: v for k, v in final.items()
+                    if k not in ("reply", "execution_results", "activity_log")
+                }
+
+            if final.get("store_intent") and st.session_state.get("auto_enhance"):
+                st.session_state["stored_adjustment_intent"] = final["intent_to_store"]
+
+            for entry in final.get("activity_log", []):
+                st.session_state.setdefault("agent_notifications", []).append(
+                    {"type": "info", "text": entry.get("message", ""),
+                     "timestamp": entry.get("timestamp", "")}
+                )
+
+            _adj_reply = final.get("reply") or "Something went wrong."
+            _reply_slot.markdown(_adj_reply)
+            st.session_state["chat_msgs"].append(
+                {"role": "assistant", "content": _adj_reply}
+            )
 
         else:
             from atdj.rag.query import answer_question
-            with st.spinner("Agent thinking..."):
-                try:
-                    response = answer_question(msg_text.strip())
-                    reply = response if isinstance(response, str) else str(response)
-                except Exception as e:
-                    reply = f"(Agent error: {e})"
+            _reply_slot.markdown("_Searching tango knowledge..._")
+            try:
+                response = answer_question(msg_text.strip())
+                reply = response if isinstance(response, str) else str(response)
+            except Exception as e:
+                reply = f"(Agent error: {e})"
+            _reply_slot.markdown(reply)
             st.session_state["chat_msgs"].append({"role": "assistant", "content": reply})
 
-        st.session_state["input_counter"] = st.session_state.get("input_counter", 0) + 1
         st.rerun()
 
 # ── Center column: Music ─────────────────────────────────────────────────────
@@ -862,6 +885,10 @@ def _section_music():
         /* ── Agent chat: disable textarea resize handle ── */
         [data-testid="stColumn"]:has(#agent-col-marker) textarea {
             resize: none !important;
+        }
+        /* Hide Streamlit's "Press Ctrl+Enter to apply" hint — chat send is via the ➤ button */
+        [data-testid="stColumn"]:has(#agent-col-marker) [data-testid="InputInstructions"] {
+            display: none !important;
         }
         /* ── Hide send button marker ── */
         [data-testid="stElementContainer"]:has(#send-btn-marker) { display: none !important; }
@@ -1067,7 +1094,16 @@ def _section_music():
                     unsafe_allow_html=True,
                 )
             else:
-                st.info("No tracks in queue.")
+                st.markdown(
+                    '<div style="background:#F9F9F9;border:1px dashed #DEDEDE;'
+                    'border-radius:8px;padding:16px 14px;min-height:140px;'
+                    'display:flex;flex-direction:column;justify-content:center;'
+                    'align-items:center;text-align:center">'
+                    '<p style="font-size:13px;color:#AAAAAA;margin:0 0 4px">No track playing</p>'
+                    '<p style="font-size:12px;color:#BBBBBB;margin:0">Plan a session to get started</p>'
+                    '</div>',
+                    unsafe_allow_html=True,
+                )
 
         with ctrl_col:
             st.markdown('<div id="ctrl-col-marker"></div>', unsafe_allow_html=True)
@@ -1171,17 +1207,20 @@ def _section_music():
                         '<p style="font-size:13px;font-weight:400;color:#31333F;margin:0 0 14px">Quality Enhance</p>',
                         unsafe_allow_html=True,
                     )
-                    st.toggle("Quality Enhance", value=True, key="auto_enhance",
-                              label_visibility="collapsed")
+                    st.toggle("Quality Enhance", value=False, key="auto_enhance",
+                              label_visibility="collapsed",
+                              on_change=lambda: _log(f'Quality Enhance turned {"ON" if st.session_state.get("auto_enhance") else "OFF"}.', "info"))
                 with gap_c:
                     st.number_input(
                         "Transition (s)", min_value=0, max_value=60, value=10, key="song_gap",
                         label_visibility="visible",
+                        on_change=lambda: _log(f'Transition gap set to {st.session_state.get("song_gap")}s.', "info"),
                     )
                 with cort_c:
                     st.number_input(
                         "Cortina (s)", min_value=5, max_value=120, value=30, key="cortina_len",
                         label_visibility="visible",
+                        on_change=lambda: _log(f'Cortina length set to {st.session_state.get("cortina_len")}s.', "info"),
                     )
 
         # ── Row 2: ENERGY ARC (full width of main_col) ──
@@ -1193,7 +1232,15 @@ def _section_music():
 
         # ── Row 3: FULL PLAYLIST ──
         _hr()
-        _lbl("Full Playlist")
+        title_col, clear_col = st.columns([8, 1], vertical_alignment="center")
+        with title_col:
+            _lbl("Full Playlist")
+        with clear_col:
+            if pq.items and st.button("Clear", key="pl_clear_all", help="Clear all tracks", use_container_width=True):
+                _log(f'Cleared playlist ({len(pq.items)} tracks).', "change")
+                pq.items.clear()
+                _save_pq(pq)
+                st.rerun()
         playlist = pq.items
         cortina_len = st.session_state.get("cortina_len", 30)
 
@@ -1224,15 +1271,18 @@ def _section_music():
                             if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
                                 pq.move_up(i)
                                 _save_pq(pq)
+                                _log(f'Moved "{item["title"]}" up in playlist.', "change")
                                 st.rerun()
                     with cb2:
                         if i < len(playlist) - 1:
                             if st.button("↓", key=f"pl_dn_{i}", help="Move down", use_container_width=True):
                                 pq.move_down(i)
                                 _save_pq(pq)
+                                _log(f'Moved "{item["title"]}" down in playlist.', "change")
                                 st.rerun()
                     with cb3:
                         if st.button("x", key=f"pl_rm_{i}", help="Remove", use_container_width=True):
+                            _log(f'Removed "{item["title"]}" from playlist.', "change")
                             pq.remove(i)
                             _save_pq(pq)
                             st.rerun()
@@ -1287,15 +1337,18 @@ def _section_music():
                             if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
                                 pq.move_up(i)
                                 _save_pq(pq)
+                                _log(f'Moved "{item["title"]}" up in playlist.', "change")
                                 st.rerun()
                     with b2:
                         if next_s >= 0:
                             if st.button("↓", key=f"pl_dn_{i}", help="Move down", use_container_width=True):
                                 pq.move_down(i)
                                 _save_pq(pq)
+                                _log(f'Moved "{item["title"]}" down in playlist.', "change")
                                 st.rerun()
                     with b3:
                         if st.button("x", key=f"pl_rm_{i}", help="Remove", use_container_width=True):
+                            _log(f'Removed "{item["title"]}" from playlist.', "change")
                             pq.remove(i)
                             _save_pq(pq)
                             st.rerun()
@@ -1309,27 +1362,37 @@ def _section_music():
             unsafe_allow_html=True,
         )
         _lbl("Session Log")
-        if "agent_notifications" not in st.session_state:
-            st.session_state["agent_notifications"] = [
-                {"type": "info",   "text": "Session started — 8 tandas planned."},
-                {"type": "change", "text": "Tanda 2 updated: switched from D'Arienzo to Canaro (warmer opening requested)."},
-                {"type": "info",   "text": "Crowd energy detected as moderate — vals tanda scheduled for tanda 3."},
-                {"type": "change", "text": "Tanda 4 adjusted: D'Arienzo inserted after feedback 'more rhythm'."},
-                {"type": "change", "text": "Tanda 5 set to Biagi by you — marked as hand-picked."},
-                {"type": "info",   "text": "Cortina after tanda 5 extended to 30s — floor transition detected."},
-                {"type": "change", "text": "Tanda 6 swapped: Pugliese replaces Fresedo (user requested more drama)."},
-                {"type": "info",   "text": "Energy arc rising — milonga scheduled for tanda 7 to sustain momentum."},
-                {"type": "change", "text": "Tanda 8 locked: Fresedo vals for cool-down close."},
-                {"type": "info",   "text": "All 8 tandas confirmed. Session map finalized."},
-            ]
-        notif_colors = {"info": ("#E8F4FD", "#1A6FAD"), "change": ("#FEF9E7", "#B7770D")}
+        # Hoist any new activity_log entries (from Tina's LangGraph nodes) into the
+        # agent_notifications list that this panel renders. Dedup on identical entries.
+        if "activity_log" in st.session_state:
+            for entry in st.session_state["activity_log"]:
+                notification = {
+                    "type": entry.get("level", "info"),
+                    "text": f"[{entry.get('node', '?')}] {entry.get('message', '')}",
+                    "timestamp": entry.get("timestamp", ""),
+                }
+                if notification not in st.session_state["agent_notifications"]:
+                    st.session_state["agent_notifications"].append(notification)
+        notif_colors = {
+            "info": ("#E8F4FD", "#1A6FAD"),
+            "change": ("#FEF9E7", "#B7770D"),
+            "decision": ("#E8F8E8", "#2D8A4E"),
+            "warning": ("#FEF9E7", "#B7770D"),
+            "error": ("#FDE8E8", "#C44040"),
+        }
         with st.container(height=150):
             for n in reversed(st.session_state["agent_notifications"]):
                 bg, clr = notif_colors.get(n["type"], ("#F7F7F7", "#555"))
+                ts = n.get("timestamp", "")
+                # Tina's _log emits ISO datetime; the manual _log helper emits HH:MM:SS.
+                # Normalize to HH:MM:SS for the panel.
+                if ts and "T" in ts:
+                    ts = ts.split("T", 1)[1][:8]
+                ts_html = f'<span style="color:#999;font-size:10px;margin-right:6px">{ts}</span>' if ts else ''
                 st.markdown(
                     f'<div style="background:{bg};border-left:3px solid {clr};'
                     f'border-radius:0 4px 4px 0;padding:5px 10px;margin-bottom:4px;font-size:12px;color:#333">'
-                    f'{n["text"]}</div>',
+                    f'{ts_html}{n["text"]}</div>',
                     unsafe_allow_html=True,
                 )
 
@@ -1381,6 +1444,7 @@ def _section_music():
                                     "style": row["style"].upper(), "orchestra": row["orchestra"],
                                     "singer": str(row.get("singer", "")) if str(row.get("singer", "")) != "nan" else "",
                                     "year": int(row["year"]) if pd.notna(row.get("year")) else 0,
+                                    "energy": float(row["energy"]) if pd.notna(row.get("energy")) else None,
                                     "source": "user", "tanda_id": next_tid,
                                 }
                                 pq.items.append(entry)
@@ -1392,46 +1456,6 @@ def _section_music():
                                 st.rerun()
             else:
                 st.caption("Search to find and add songs.")
-
-# ── Right column: Agent Log ──────────────────────────────────────────────────
-
-def _section_log():
-    st.markdown("#### Session Planning Log")
-
-    if "agent_notifications" not in st.session_state:
-        st.session_state["agent_notifications"] = []
-
-    if "activity_log" in st.session_state:
-        for entry in st.session_state["activity_log"]:
-            notification = {
-                "type": entry.get("level", "info"),
-                "text": f"[{entry['node']}] {entry['message']}",
-                "timestamp": entry.get("timestamp", ""),
-            }
-            if notification not in st.session_state["agent_notifications"]:
-                st.session_state["agent_notifications"].append(notification)
-
-    level_colors = {
-        "info":     ("#E8F4FD", "#1A6FAD"),
-        "decision": ("#E8F8E8", "#2D8A4E"),
-        "warning":  ("#FEF9E7", "#B7770D"),
-        "error":    ("#FDE8E8", "#C44040"),
-    }
-
-    log_container = st.container(height=220)
-    with log_container:
-        if not st.session_state["agent_notifications"]:
-            st.caption("No activity yet — plan a session to see live updates here.")
-        else:
-            for n in reversed(st.session_state["agent_notifications"]):
-                bg, clr = level_colors.get(n["type"], ("#F7F7F7", "#555"))
-                timestamp = n.get("timestamp", "")[:19].replace("T", " ") if n.get("timestamp") else ""
-                st.markdown(
-                    f'<div style="background:{bg};border-left:3px solid {clr};'
-                    f'border-radius:0 4px 4px 0;padding:6px 10px;margin-bottom:5px;font-size:11px;color:#333">'
-                    f'<span style="color:#999;font-size:10px">{timestamp}</span> {n["text"]}</div>',
-                    unsafe_allow_html=True,
-                )
 
 # ── Bottom: Library, Queue, Upload ──────────────────────────────────────────
 
@@ -1483,7 +1507,7 @@ def _tab_library():
 
 def _tab_queue():
     st.caption("Upcoming queue — 💡 = agent planned · 👤 = hand-picked by you. Remove or reorder as needed.")
-    queue = st.session_state.get("live_queue", list(QUEUE_STUB))
+    queue = st.session_state.get("live_queue", [])
 
     if not queue:
         st.info("Queue is empty.")
@@ -1523,16 +1547,18 @@ def _tab_queue():
 # ── Main entry point ─────────────────────────────────────────────────────────
 
 def show():
+    import datetime as _dt
+    if "agent_notifications" not in st.session_state:
+        st.session_state["agent_notifications"] = []
+
     _sidebar()
 
-    # Header — compact: title + active session subtitle
-    _sessions = st.session_state.get("sessions", SESSION_HISTORY)
-    _active   = st.session_state.get("active_session", 0)
-    _sess_lbl = _sessions[_active]["label"] if _sessions else "Tonight"
+    # Header — compact: title + today's date
+    today = _dt.date.today().strftime("%Y-%m-%d")
     st.markdown(
         f'<div style="padding:4px 0 2px;display:flex;align-items:baseline;gap:12px">'
         f'<span style="font-size:18px;font-weight:700;color:#1A1A1A">DJ Console</span>'
-        f'<span style="font-size:12px;color:#999">{_sess_lbl}</span>'
+        f'<span style="font-size:12px;color:#999">{today}</span>'
         f'</div>'
         f'<hr style="margin:4px 0 0;border:none;border-top:1px solid #EBEBEB">',
         unsafe_allow_html=True,

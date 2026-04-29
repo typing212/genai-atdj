@@ -120,6 +120,118 @@ Tests the audio enhancement pipeline using synthetic audio (sine wave + white no
 
 ---
 
+---
+
+## test_enhancement_params.py — Exposed Enhancement Parameters
+
+Tests the three parameters that were previously hardcoded inside `enhance_track()` and
+the new `param_overrides` argument on `enhance_tanda()`. Uses synthetic WAV audio at
+44100 Hz — no real audio files needed.
+
+Run only this file:
+```
+uv run pytest tests/test_enhancement_params.py -v
+```
+
+### enhance_track() new params
+
+| Test | What it checks |
+|---|---|
+| `test_default_params_unchanged_behavior` | Calling with all defaults still produces output and metrics |
+| `test_custom_highpass_runs_without_error` | `highpass_hz=120.0` is accepted and pipeline completes |
+| `test_custom_lowered_highpass` | `highpass_hz=60.0` is accepted and pipeline completes |
+| `test_custom_limiter_threshold` | `limiter_threshold_db=-3.0` is accepted and pipeline completes |
+| `test_hiss_cutoff_override_disables_auto_detect` | When `hiss_cutoff_override=8000.0`, the returned `hiss_cutoff` matches the override exactly |
+| `test_hiss_cutoff_none_uses_auto` | `hiss_cutoff_override=None` triggers auto-detection and returns a positive value |
+| `test_custom_target_lufs` | Track enhanced to `-11.0` LUFS is louder than one enhanced to `-18.0` LUFS |
+| `test_no_output_path_returns_metrics_only` | Passing `output_path=None` returns the metrics dict without writing a file |
+
+### enhance_tanda() param_overrides
+
+| Test | What it checks |
+|---|---|
+| `test_backward_compat_no_overrides` | Calling without `param_overrides` behaves identically to before |
+| `test_param_overrides_applied` | Tracks enhanced with `target_lufs=-11.0` override are louder than default |
+| `test_partial_overrides_merge_with_adaptive` | Overriding one track while leaving the other empty both complete without error |
+| `test_none_overrides_same_as_no_arg` | `param_overrides=None` gives the same result count as omitting the argument |
+| `test_empty_dict_overrides_use_adaptive` | `[{}, {}]` produces fully adaptive enhancement — same as no override |
+
+---
+
+## test_adjustment_graph.py — Natural-Language Audio Adjustment
+
+Tests the mini LangGraph in `atdj/audio/adjustment_graph.py` that handles ADJUST_AUDIO
+chat requests. Pure logic tests run with no LLM. Integration tests require `GOOGLE_API_KEY`.
+
+Run pure logic tests only (fast, no API key needed):
+```
+uv run pytest tests/test_adjustment_graph.py -v -m "not integration"
+```
+
+Run integration tests (requires API key):
+```
+uv run pytest tests/test_adjustment_graph.py -v -m integration
+```
+
+### apply_constraint() — relative floor/ceiling logic
+
+| Test | What it checks |
+|---|---|
+| `test_up_floor_track_already_higher` | Track already above target is left unchanged |
+| `test_up_floor_track_lower_than_target` | Track below target is raised to the target |
+| `test_up_floor_track_exactly_at_target` | Track at exactly the target stays at target |
+| `test_down_ceiling_track_already_lower` | Track already below target is left unchanged |
+| `test_down_ceiling_track_higher_than_target` | Track above target is lowered to target |
+| `test_reset_returns_auto_value` | Reset direction returns the track's own adaptive value unchanged |
+| `test_up_eq_gain_floor` | Same floor logic for EQ gain parameters |
+| `test_down_eq_gain_ceiling` | Track already softer than target is left unchanged |
+| `test_down_eq_gain_ceiling_applied` | Track louder than target is lowered |
+
+### resolve_targets() — scope to playlist index mapping
+
+| Test | What it checks |
+|---|---|
+| `test_rest_returns_all_songs_after_current` | scope=rest returns all song indices after current |
+| `test_rest_skips_cortinas` | Cortina items are never included in results |
+| `test_next_song_skips_cortina` | scope=next_song jumps over a cortina to reach the next song |
+| `test_next_song_no_skip_needed` | scope=next_song returns immediately adjacent song when no cortina between |
+| `test_next_tanda` | scope=next_tanda returns all songs with the next tanda_id |
+| `test_next_tanda_from_second_tanda` | Works correctly from mid-session position |
+| `test_next_tanda_no_more_tandas` | Returns empty list when no further tanda exists |
+| `test_specific_by_orchestra` | scope=specific matches by orchestra name (case-insensitive) |
+| `test_specific_by_style` | scope=specific matches by style |
+| `test_specific_case_insensitive` | Uppercase target_name still matches correctly |
+| `test_specific_no_match_returns_empty` | Unmatched target_name returns empty list |
+| `test_no_songs_after_last_track` | Returns empty list when current is the last track |
+| `test_rest_from_beginning` | scope=rest from index 0 returns all non-cortina tracks |
+
+### compute_intent_overrides() — stored intent applied to new sessions
+
+| Test | What it checks |
+|---|---|
+| `test_loudness_up_small_uses_default_reference` | Small up delta applied from DEFAULT_PARAMS baseline |
+| `test_loudness_down_medium` | Medium down delta produces correct target value |
+| `test_bass_up_large` | Large up delta on eq_low_gain produces correct target value |
+| `test_reset_returns_empty_overrides` | Reset direction returns `{}` for every track |
+| `test_unknown_feature_returns_empty` | Unrecognised feature name returns `{}` for every track |
+| `test_track_count_respected` | Output list length always matches requested track count |
+| `test_zero_tracks` | Zero track count returns an empty list |
+
+### Integration tests (LLM — `@pytest.mark.integration`)
+
+| Test | What it checks |
+|---|---|
+| `test_bass_down_small` | "turn down the bass a little" → feature=bass, direction=down, magnitude=small |
+| `test_loudness_up_medium` | "too quiet, make it louder" → feature=loudness, direction=up |
+| `test_current_song_scope` | "this song is too harsh" → scope=current |
+| `test_rest_scope` | "everything after this is too noisy" → scope=rest, feature=noise |
+| `test_reset_direction` | "go back to default" → direction=reset |
+| `test_use_original` | "use original for the next tanda" → direction=reset |
+| `test_named_target_orchestra` | "more presence in the Di Sarli tanda" → scope=specific, target_name contains "sarli" |
+| `test_ambiguous_triggers_clarification` | "it sounds a bit off" → needs_clarification=True |
+
+---
+
 ## Upcoming tests (added per WP)
 
 | File | WP | What it will cover |

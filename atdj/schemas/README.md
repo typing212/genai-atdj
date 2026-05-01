@@ -63,7 +63,7 @@ All schemas live in `atdj/schemas/` and are built with **Pydantic v2**. They act
 | `generated_by` | str | default `"agent"` | audit trail |
 | `rationale` | str or None | optional | agent explanation |
 
-**Key behavior:** `model_validator(mode="after")` enforces **style homogeneity only** — all tracks must share one style (tango/vals/milonga/cortina). `total_duration_seconds` is also computed here. Orchestra, singer, and decade homogeneity are **soft rules** enforced by the planner layer (`atdj/planner/tanda_rules.py`, WP-05) based on `MilongaSession.planning_mode` — they are not validated here so mixed-orchestra or cross-decade tandas can be created when the agent justifies them.
+**Key behavior:** `model_validator(mode="after")` enforces **style homogeneity only** — all tracks must share one style (tango/vals/milonga/cortina). `total_duration_seconds` is also computed here. Orchestra, singer, and decade homogeneity are **soft rules** enforced by the planner layer (`atdj/planner/tanda_rules.py`, WP-05) — they are not validated here so mixed-orchestra or cross-decade tandas can be created when the agent justifies them.
 
 ---
 
@@ -105,14 +105,8 @@ The top-level session object holding all planning state.
 | `target_duration_minutes` | 180 | 60–300 min allowed |
 | `styles_ratio` | `{tango:0.70, vals:0.20, milonga:0.10}` | DJ preference |
 | `avoid_repeat_orchestra_within` | 3 | tanda spacing rule |
-| `planning_mode` | `"convention"` or `"flexible"` | default `"convention"` | controls planner strictness |
 | `energy_arc` | `[]` | planned energy curve |
 | `actual_energies` | `[]` | recorded as session runs |
-
-**`planning_mode` behavior (enforced by planner layer in WP-05, not Pydantic):**
-- **`convention`** — orchestra, singer, and decade must all match within a tanda (hard error if not)
-- **`flexible`** — mismatches allowed if the agent provides a non-empty `rationale` on the `Tanda`; no rationale = blocked
-- Style (tango/vals/milonga) is always hard — enforced by Pydantic regardless of mode
 
 ---
 

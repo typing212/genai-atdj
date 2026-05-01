@@ -60,18 +60,7 @@ KEY_LABELS = {
     "Gemini": "Google API Key",
     "Ollama": "Ollama Host URL (optional)",
 }
-PLANNING_DESCRIPTIONS = {
-    "convention": "Strict rules: same orchestra, singer & decade per tanda. No exceptions.",
-    "flexible":   "Agent may mix if it supplies a written rationale. Style is always enforced.",
-}
-
 CHAT_STUB = "Got it — I'm still warming up. Connect me to the music pool for real responses. _(stub)_"
-CHAT_CONTEXTS = {
-    "Any":               "💬",
-    "Tanda Planning":    "📋",
-    "Q&A":               "🎵",
-    "Audio Enhancement": "🎛",
-}
 
 # ── Playback helpers ─────────────────────────────────────────────────────────
 # These are new helpers specific to this UI page — no equivalent exists elsewhere.
@@ -343,7 +332,6 @@ def _init_settings():
     st.session_state["s_provider"] = pm.get(cfg.LLM_PROVIDER, "Claude")
     st.session_state["s_model"]    = cfg.CLAUDE_MODEL
     st.session_state["s_api_key"]  = ""
-    st.session_state["s_planning"] = "convention"
     st.session_state["settings_initialized"] = True
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -427,8 +415,6 @@ def _section_chat():
         for msg in st.session_state["chat_msgs"]:
             avatar = "👤" if msg["role"] == "user" else "💡"
             with st.chat_message(msg["role"], avatar=avatar):
-                if msg["role"] == "user" and msg.get("context") and msg["context"] != "Any":
-                    st.caption(f"{CHAT_CONTEXTS.get(msg['context'], '')} {msg['context']}")
                 st.markdown(msg["content"])
 
     # Unified input card (Claude-style)
@@ -440,32 +426,14 @@ def _section_chat():
             label_visibility="collapsed", key=_input_key,
             height=87,
         )
-        ctx_col, mode_col, send_col = st.columns([3, 3, 1])
-        with ctx_col:
-            context = st.selectbox(
-                "Context", list(CHAT_CONTEXTS.keys()), index=0,
-                format_func=lambda k: f"{CHAT_CONTEXTS[k]} {k}",
-                label_visibility="collapsed", key="chat_context_select",
-            )
-        with mode_col:
-            planning_opts = ["convention", "flexible"]
-            cur_plan = st.session_state.get("s_planning", "convention")
-            cur_idx = planning_opts.index(cur_plan) if cur_plan in planning_opts else 0
-            sel_plan = st.selectbox(
-                "Mode",
-                planning_opts,
-                index=cur_idx,
-                format_func=lambda x: "🎩 Convention" if x == "convention" else "🎨 Flexible",
-                label_visibility="collapsed", key="chat_mode_select",
-            )
-            st.session_state["s_planning"] = sel_plan
+        _, send_col = st.columns([6, 1])
         with send_col:
             st.markdown('<div id="send-btn-marker"></div>', unsafe_allow_html=True)
             send = st.button("➤", use_container_width=True, key="chat_send", help="Send")
 
     if send and msg_text.strip():
         # Stash + rerun so the input clears before the long agent call
-        st.session_state["_pending_chat_msg"] = {"text": msg_text.strip(), "context": context}
+        st.session_state["_pending_chat_msg"] = {"text": msg_text.strip()}
         st.session_state["input_counter"] = st.session_state.get("input_counter", 0) + 1
         st.session_state.pop(_input_key, None)
         st.rerun()
@@ -473,16 +441,13 @@ def _section_chat():
     _pending = st.session_state.pop("_pending_chat_msg", None)
     if _pending:
         msg_text = _pending["text"]
-        context = _pending["context"]
         st.session_state["chat_msgs"].append(
-            {"role": "user", "context": context, "content": msg_text.strip()}
+            {"role": "user", "content": msg_text.strip()}
         )
 
         # Show the new user message and a reply slot inside the chat container
         with chat_container:
             with st.chat_message("user", avatar="👤"):
-                if context != "Any":
-                    st.caption(f"{CHAT_CONTEXTS.get(context, '')} {context}")
                 st.markdown(msg_text.strip())
             with st.chat_message("assistant", avatar="💡"):
                 _reply_slot = st.empty()
@@ -491,27 +456,20 @@ def _section_chat():
         from langchain_core.messages import HumanMessage
         from atdj.config import get_ui_llm
 
-        if context == "Tanda Planning":
-            is_planning, is_audio_adjust = True, False
-        elif context == "Q&A":
-            is_planning, is_audio_adjust = False, False
-        elif context == "Audio Enhancement":
-            is_planning, is_audio_adjust = False, True
-        else:
-            try:
-                _llm = get_ui_llm()
-                _classify = _llm.invoke([HumanMessage(content=f"""Classify into exactly one category:
+        try:
+            _llm = get_ui_llm()
+            _classify = _llm.invoke([HumanMessage(content=f"""Classify into exactly one category:
 PLAN: plan/find/suggest/change music tracks or playlist
 ADJUST_AUDIO: audio quality changes (too quiet, too loud, too harsh, more bass, noisy, back to default, use original, reset audio, undo changes)
 QUESTION: tango knowledge (history, orchestras, styles)
 Message: "{msg_text.strip()}"
 Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
-                label = _classify.content.strip().upper()
-                is_planning = "PLAN" in label
-                is_audio_adjust = "ADJUST_AUDIO" in label
-            except Exception as _ce:
-                _reply_slot.markdown(f"_(Classifier error: {_ce}. Treating as Q&A.)_")
-                is_planning, is_audio_adjust = False, False
+            label = _classify.content.strip().upper()
+            is_planning = "PLAN" in label
+            is_audio_adjust = "ADJUST_AUDIO" in label
+        except Exception as _ce:
+            _reply_slot.markdown(f"_(Classifier error: {_ce}. Treating as Q&A.)_")
+            is_planning, is_audio_adjust = False, False
 
         if is_planning:
             _reply_slot.markdown("_Planning your session..._")

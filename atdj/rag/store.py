@@ -24,7 +24,9 @@ KNOWLEDGE_COLLECTION  = "domain_knowledge"
 
 
 # ── Singleton client — avoids reloading sentence-transformers on every rerun ──
-_chroma_client: chromadb.PersistentClient | None = None
+# Original (Nancy): _chroma_client: chromadb.PersistentClient | None = None
+# chromadb 1.5.8 exposes PersistentClient as a function; PEP 604 `func | None` at module level → TypeError.
+_chroma_client: Optional[chromadb.PersistentClient] = None
 
 
 def get_client() -> chromadb.PersistentClient:

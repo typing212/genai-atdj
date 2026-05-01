@@ -1,7 +1,7 @@
 # UI Manual Test Guide
 
 **App:** AT-DJ — AI Tanda DJ
-**Last updated:** 2026-04-29
+**Last updated:** 2026-04-30
 
 Work through tests top-to-bottom; each builds on the previous. Each test has a clear input, expected result, and pass/fail verdict.
 
@@ -88,14 +88,14 @@ Until a key is entered, chat / planning requests will fail.
 
 | # | Action | Expected | Pass? |
 |---|--------|----------|-------|
-| 2.1 | Set chat context to **Tanda Planning**, type `Plan a tanda of Pugliese tangos from the 1940s`, send | Input clears immediately on send. Spinner runs ~3-10s. Chat reply: `✅ Done! I've planned 4 tracks. Orchestras: Osvaldo Pugliese. Styles: TANGO.` | PASS (2026-04-29) |
+| 2.1 | Type `Plan a tanda of Pugliese tangos from the 1940s`, send | Input clears immediately on send. Classifier routes to PLAN. Spinner runs ~3-10s. Chat reply: `✅ Done! I've planned 4 tracks. Orchestras: Osvaldo Pugliese. Styles: TANGO.` | PASS (2026-04-29) |
 | 2.2 | Full Playlist | 4 tracks, all by Pugliese, decade 1940s | PASS (2026-04-29) |
 | 2.3 | Now Playing | First Pugliese track loaded | PASS (2026-04-29) |
 | 2.4 | Energy Arc chart | 4 dots, Y axis within 0–100% | PASS (2026-04-29) |
 | 2.5 | Session Log shows these entries (info level except where noted) | `[session_init] Plan started — 1 tanda(s) requested` · `[tanda_planner] Tanda 1/1 planned in X.Xs (4 tracks)` · `[cortina_selector] Cortina selected: ...` · `[queue_publisher] Tanda 1 published to queue.` · `[session_summary] Plan complete: 1 tanda(s).` | PASS (2026-04-29) |
 | 2.6 | Check `data/log/` directory | A new `session_log_<timestamp>.json` file appears for this run; `doc/` does **not** receive any session log files | PASS (2026-04-29) |
-| 2.7 | Send a second plan (e.g. `Plan a tanda of Di Sarli tangos from the 1940s`) | New tracks **append** to the existing playlist (don't overwrite); cortina row inserted between tandas | |
-| 2.8 | Leave context on **Any**, type `Plan me a full milonga session` | Classifier routes to PLAN; multiple tandas across styles appear | |
+| 2.7 | Send a second plan (e.g. `Plan a tanda of Di Sarli tangos from the 1940s`) | New tracks **append** to the existing playlist (don't overwrite); cortina row inserted between tandas | PASS (2026-04-30) |
+| 2.8 | Type `Plan me a full milonga session` | Classifier routes to PLAN; multiple tandas across styles appear | PASS (2026-04-30) |
 
 ---
 
@@ -105,7 +105,7 @@ Until a key is entered, chat / planning requests will fail.
 
 | # | Action | Expected | Pass? |
 |---|--------|----------|-------|
-| 3.1 | Set context to **Tanda Planning**, type `Plan me a tanda of rock music from 2020`, send | Chat reply: `⚠️ Couldn't find enough tracks. Try a different prompt!` | PASS (2026-04-29) |
+| 3.1 | Type `Plan me a tanda of rock music from 2020`, send | Classifier routes to PLAN. Chat reply: `⚠️ Couldn't find enough tracks. Try a different prompt!` | PASS (2026-04-29) |
 | 3.2 | Session Log `[tanda_planner]` entry | Single warning: `Tanda 1/1 failed in X.Xs — no tracks selected (reason)`. **No** preceding info "planned" line. | PASS (2026-04-29) |
 | 3.3 | Session Log `[queue_publisher]` entry | `Tanda 1 skipped (no tracks)` at warning level — not "published to queue" | PASS (2026-04-29) |
 | 3.4 | Session Log `[cortina_selector]` entry | **No entry** — node was skipped because the tanda was empty | PASS (2026-04-29) |
@@ -120,10 +120,10 @@ Until a key is entered, chat / planning requests will fail.
 
 | # | Action | Expected | Pass? |
 |---|--------|----------|-------|
-| 4.1 | Set context to **Q&A**, type `Who is Carlos Di Sarli?` | Real biographical answer mentioning pianist / orchestra leader / 1940s / smooth style | |
-| 4.2 | Type `What is the difference between tango and vals?` | Answer covers musical differences (rhythm, tempo, feel) | |
-| 4.3 | Leave context on **Any**, type `What BPM is Bahia Blanca?` | Classifier routes to QUESTION; returns a number or says not found | |
-| 4.4 | Session Log after questions | No `tanda_planner` / `cortina_selector` entries — Q&A doesn't trigger the planning graph | |
+| 4.1 | Type `Who is Carlos Di Sarli?` | Classifier routes to QUESTION. Real biographical answer mentioning pianist / orchestra leader / 1940s / smooth style | PASS (2026-04-30, after `store.py` fix) |
+| 4.2 | Type `What is the difference between tango and vals?` | Classifier routes to QUESTION. Answer covers musical differences (rhythm, tempo, feel) | PASS (2026-04-30, after `store.py` fix) |
+| 4.3 | Type `What BPM is Bahia Blanca?` | Classifier routes to QUESTION; returns a number or says not found | PASS (2026-04-30, after `store.py` fix) |
+| 4.4 | Session Log after questions | No `tanda_planner` / `cortina_selector` entries — Q&A doesn't trigger the planning graph | PASS (2026-04-30) |
 
 > If answers are empty: ChromaDB wasn't ingested. Run the ingest commands from Setup §2.
 
@@ -210,15 +210,13 @@ Until a key is entered, chat / planning requests will fail.
 
 | # | Action | Expected | Pass? |
 |---|--------|----------|-------|
-| 9.1.1 | Set context to **Audio Enhancement** | Label shows `🎛 Audio Enhancement` | |
-| 9.1.2 | Type any message and send | Goes straight to audio processing — no extra classifier spinner | |
-| 9.1.3 | Set context to **Any**, type `the next tanda is too loud` | Classifier routes to ADJUST_AUDIO (not PLAN/QUESTION) | |
+| 9.1.1 | Type `the next tanda is too loud`, send | Classifier routes to ADJUST_AUDIO (not PLAN/QUESTION); audio processing starts | |
 
 ### 9.2 Standard adjustment
 
 | # | Action | Expected | Pass? |
 |---|--------|----------|-------|
-| 9.2.1 | Context **Audio Enhancement**, type `the next tanda is a bit too harsh`, send | Spinner: `Analyzing and enhancing audio…` | |
+| 9.2.1 | Type `the next tanda is a bit too harsh`, send | Classifier routes to ADJUST_AUDIO. Spinner: `Analyzing and enhancing audio…` | |
 | 9.2.2 | After spinner | Chat reply confirms presence reduction (mentions track count, direction) | |
 | 9.2.3 | `data/processed/` | Updated `_enhanced.wav` files for those tracks (newer timestamp) | |
 | 9.2.4 | Session Log | Entries from `parse_request`, `measure_reference`, `compute_adjustments`, `execute_enhancement` | |
@@ -302,7 +300,7 @@ Until a key is entered, chat / planning requests will fail.
 | 1 | Fresh start state | PASS (2026-04-29) |
 | 2 | PLAN path — happy path | PASS (2026-04-29) |
 | 3 | PLAN path — empty result | PASS (2026-04-29) |
-| 4 | Q&A path | |
+| 4 | Q&A path | PASS (2026-04-30) |
 | 5 | Session Log — user actions | |
 | 6 | Energy Arc chart | |
 | 7 | Playback controls | |
@@ -324,6 +322,6 @@ Until a key is entered, chat / planning requests will fail.
 | PLAN reply says "Couldn't find enough tracks" in <1s | The translator failed silently (likely missing API key for the selected provider) | Check the `[tanda_planner]` warning in the Session Log — it includes provider/model/key-set state |
 | Auto-enhance shows 0 tracks | `data/raw/` empty or filenames don't match catalog | Confirm files in `data/raw/` and titles match `reduced_catalog.csv` |
 | Player serves raw audio after enhancement | Browser audio cached; or `data/processed/` doesn't have a newer `_enhanced.wav` | Restart Streamlit or hard-reload the page |
-| `back to default` triggers a planning response | Classifier routed to PLAN | Set context dropdown to **Audio Enhancement** to bypass the classifier |
+| `back to default` triggers a planning response | Classifier routed to PLAN | Re-phrase with clearer audio-adjustment vocabulary (loud/soft/bass/harsh/reset) so the classifier reliably picks ADJUST_AUDIO |
 | Clarification question, then second message starts a new request | `pending_adjustment` cleared by a page reload | Don't reload mid-clarification; resend the original |
 | Gemini 429 visible in terminal | Rate limit during Q&A | Normal — Claude fallback runs automatically; the Q&A answer still returns |

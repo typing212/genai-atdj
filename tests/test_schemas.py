@@ -138,21 +138,6 @@ def make_session(**overrides):
     return PlanSession(**base)
 
 
-def test_session_planning_mode_default():
-    s = make_session()
-    assert s.planning_mode == "convention"
-
-
-def test_session_planning_mode_flexible():
-    s = make_session(planning_mode="flexible")
-    assert s.planning_mode == "flexible"
-
-
-def test_session_planning_mode_invalid():
-    with pytest.raises(Exception):
-        make_session(planning_mode="strict")
-
-
 # --- FeedbackEvent ---
 
 def test_valid_feedback_event():

@@ -6,6 +6,38 @@ Post-merge edits made to teammates' code on top of the `nancy-upload + tina` mer
 
 ---
 
+## 2026-04-30 — new changes (post last sync)
+
+Roommate sync note: everything in the dated section below is **after** the previous handoff. Older changes are documented further down by area.
+
+### Removed chat input selectors
+The two dropdowns next to the chat textarea — *Context* (`Any / Tanda Planning / Q&A / Audio Enhancement`) and *Mode* (`Convention / Flexible`) — were removed. Every prompt now flows through the LLM classifier (the previous "Any" path), which routes to PLAN / ADJUST_AUDIO / QUESTION. Concrete cleanups:
+- `atdj/ui/page_main.py`: dropped `CHAT_CONTEXTS`, `PLANNING_DESCRIPTIONS`, both `st.selectbox` widgets, the `s_planning` initializer, the per-message context badge, and the `if context == ...` dispatch chain. Layout simplified to textarea + send button.
+- `atdj/schemas/session.py`: removed the `planning_mode: Literal[...]` field from `PlanSession` (it was stored but never branched on).
+- `atdj/schemas/README.md`: dropped the `planning_mode` table row and its behavior block.
+- `tests/test_schemas.py`: removed three `test_session_planning_mode_*` tests.
+- `tests/UI_TEST_GUIDE.md`: dropped "Set context to ..." instructions from steps 2.1, 2.8, 3.1, 4.1, 4.3, 9.1, 9.2.1; collapsed Test 9.1 (Routing) from three sub-steps to one; reworded the common-issues fix for misrouted `back to default`.
+- `atdj/agent/nodes.py` (Tina): the `"planning_mode"` key on the session-summary log dict was **commented out** (not deleted) per the teammate-edit rule. It used `getattr(..., default=...)` so it would not have crashed after the schema change, but logging a removed field is misleading.
+
+### Q&A path import fix — `atdj/rag/store.py` (Nancy)
+Discovered while running Test 4 (Q&A path) end-to-end for the first time. Importing `atdj.rag.query` failed at module load with `TypeError: unsupported operand type(s) for |: 'function' and 'NoneType'`, traced to:
+
+```python
+_chroma_client: chromadb.PersistentClient | None = None
+```
+
+In chromadb 1.5.8, `PersistentClient` is a function, not a class. PEP 604 union syntax (`X | Y`) on a function value is evaluated at module-load time and raises this TypeError. PLAN tests passed because they go through `atdj/agent/tools.py → rag/select_tanda.py`, which never imports `query.py`.
+
+Per the teammate-edit rule, the original line is **commented out** and the new annotation is added alongside, using `Optional[...]` (already imported on line 19):
+
+```python
+# Original (Nancy): _chroma_client: chromadb.PersistentClient | None = None
+# chromadb 1.5.8 exposes PersistentClient as a function; PEP 604 `func | None` at module level → TypeError.
+_chroma_client: Optional[chromadb.PersistentClient] = None
+```
+
+---
+
 ## UI
 
 ### Empty initial state

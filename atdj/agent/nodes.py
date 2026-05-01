@@ -240,7 +240,7 @@ def session_summary(state: AgentState) -> dict:
         "timestamp": timestamp,
         "total_tandas_planned": total,
         # Original (Tina): "energy_arc": state["energy_arc"],   ← removed with energy_arc
-        "planning_mode": getattr(state["session"], "planning_mode", "convention"),
+        # Original (Tina): "planning_mode": getattr(state["session"], "planning_mode", "convention"),   ← removed with planning_mode field
         "feedback_events_received": len(state.get("pending_feedback", [])),
         "agent_actions": [
             msg.content for msg in state.get("messages", [])

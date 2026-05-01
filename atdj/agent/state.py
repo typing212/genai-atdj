@@ -43,3 +43,9 @@ class AgentState(TypedDict):
     # selection step end-to-end instead of running it in a separate loop in page_main.py.
     session_plan: list[tuple[str, str]]
     picked_tracks: list[list[dict]]
+    # 2026-05-01 (Vanessa): per-tanda cortina selections produced by the
+    # cortina_selector node. Each call appends one dict {title, filename,
+    # duration_seconds} so the UI can read them in order and present the
+    # actual cortina that will play (instead of the previous generic
+    # "Cortina" placeholder). Reducer: operator.add → list grows.
+    selected_cortinas: Annotated[list[dict], operator.add]

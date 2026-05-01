@@ -175,6 +175,21 @@ def cortina_selector(state: AgentState) -> dict:
 
     title = result.get("title", result.get("filename", "unknown"))
 
+    # Original (Tina) — preserved below. The node only logged the choice
+    # and didn't propagate it to state, so the UI could not show the actual
+    # cortina that was going to play (fell back to a hardcoded "Cortina"
+    # title). 2026-05-01: also write a structured entry to
+    # state["selected_cortinas"] (Annotated list with operator.add) so the
+    # UI reads the agent's selections in order. The selection algorithm
+    # itself is unchanged — that gets a separate tune later.
+    # return {
+    #     "needs_cortina": False,
+    #     "last_agent_action": "cortina_selected",
+    #     "messages": [AIMessage(content=f"Cortina selected: {title}")],
+    #     "activity_log": [
+    #         _log("cortina_selector", "info", f"Cortina selected: {title}"),
+    #     ],
+    # }
     return {
         "needs_cortina": False,
         "last_agent_action": "cortina_selected",
@@ -182,6 +197,11 @@ def cortina_selector(state: AgentState) -> dict:
         "activity_log": [
             _log("cortina_selector", "info", f"Cortina selected: {title}"),
         ],
+        "selected_cortinas": [{
+            "title": title,
+            "filename": result.get("filename"),
+            "duration_seconds": result.get("duration_seconds", 20.0),
+        }],
     }
 
 

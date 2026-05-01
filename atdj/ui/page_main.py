@@ -53,12 +53,13 @@ CATALOG_FALLBACK = [
 PROVIDER_MODELS = {
     "Claude": ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5"],
     "Gemini": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
-    "Ollama": ["llama3.2", "mistral", "phi3"],
+    # 2026-05-01: Ollama option removed — `atdj/config.get_ui_llm()` only wires
+    # Claude (ChatAnthropic) and Gemini (ChatGoogleGenerativeAI). Anything else
+    # silently falls through to ChatGoogleGenerativeAI with the wrong API key.
 }
 KEY_LABELS = {
     "Claude": "Anthropic API Key",
     "Gemini": "Google API Key",
-    "Ollama": "Ollama Host URL (optional)",
 }
 CHAT_STUB = "Got it — I'm still warming up. Connect me to the music pool for real responses. _(stub)_"
 
@@ -365,7 +366,7 @@ def _get_rag_translator(provider: str):
 def _init_settings():
     if st.session_state.get("settings_initialized"):
         return
-    pm = {"claude": "Claude", "gemini": "Gemini", "ollama": "Ollama"}
+    pm = {"claude": "Claude", "gemini": "Gemini"}
     st.session_state["s_provider"] = pm.get(cfg.LLM_PROVIDER, "Claude")
     st.session_state["s_model"]    = cfg.CLAUDE_MODEL
     st.session_state["s_api_key"]  = ""
@@ -396,18 +397,17 @@ def _sidebar():
 
         # Provider + Model side by side
         pv_col, md_col = st.columns(2)
-        provider_opts = list(PROVIDER_MODELS.keys()) + ["Others"]
+        # 2026-05-01: dropped the "Others" option — only Claude and Gemini are
+        # wired in the backend (`atdj/config.get_ui_llm()`).
+        provider_opts = list(PROVIDER_MODELS.keys())
         cur_provider  = st.session_state.get("s_provider", "Claude")
         with pv_col:
             sel_provider = st.selectbox(
                 "Provider", provider_opts,
-                index=provider_opts.index(cur_provider) if cur_provider in provider_opts else len(provider_opts) - 1,
+                index=provider_opts.index(cur_provider) if cur_provider in provider_opts else 0,
                 key="sb_provider", label_visibility="collapsed",
             )
-        provider = sel_provider if sel_provider != "Others" else st.session_state.get("sb_provider_custom", "")
-        if sel_provider == "Others":
-            provider = st.text_input("Provider name", placeholder="e.g. OpenAI",
-                                     key="sb_provider_custom", label_visibility="collapsed")
+        provider = sel_provider
         st.session_state["s_provider"] = provider
 
         model_opts = PROVIDER_MODELS.get(provider, []) + ["Others"]
@@ -552,6 +552,7 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     "candidate_tracks": [], "current_tanda_draft": None, "last_agent_action": None,
                     "qa_question": None, "qa_answer": None, "error_message": None, "retry_count": 0,
                     "agent_log": [], "activity_log": [],
+                    "selected_cortinas": [],
                     "session_plan": session_plan,
                     "picked_tracks": [],
                 }
@@ -588,6 +589,10 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
 
                 new_playlist = []
                 picked_per_tanda = final_state.get("picked_tracks") or []
+                # 2026-05-01: load pq up front so the cortina-title resolver below
+                # can use it. Was previously only loaded after the loop, which broke
+                # the new resolver call with UnboundLocalError.
+                pq = _get_pq()
                 for tanda_idx, tanda_tracks in enumerate(picked_per_tanda):
                     if not tanda_tracks:
                         continue
@@ -610,8 +615,26 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                             "tanda_id": tanda_idx,
                         })
                     if tanda_idx < len(picked_per_tanda) - 1:
+                        # 2026-05-01: read the agent's actual cortina selection from
+                        # state["selected_cortinas"] (one entry per cortina_selector
+                        # call, in order). The selection algorithm in
+                        # atdj/agent/nodes.py:cortina_selector currently returns the
+                        # placeholder `default_cortina` because the song catalog CSV
+                        # has no cortina rows — that gets a separate tune later.
+                        # For now: take the agent's title, then run it through the
+                        # PlaybackQueue resolver to get the file the player will
+                        # actually serve. Use that file's stem as the displayed
+                        # title so display == playback (no silent mismatch).
+                        _agent_cortinas = final_state.get("selected_cortinas") or []
+                        if tanda_idx < len(_agent_cortinas):
+                            _cor = _agent_cortinas[tanda_idx]
+                            _agent_title = _cor.get("title") or _cor.get("filename") or "Cortina"
+                        else:
+                            _agent_title = "Cortina"
+                        _resolved_path = pq.resolve_file_path({"type": "cortina", "title": _agent_title})
+                        _cortina_title = _Path(_resolved_path).stem if _resolved_path else _agent_title
                         new_playlist.append({
-                            "type": "cortina", "title": "Cortina",
+                            "type": "cortina", "title": _cortina_title,
                             "duration": "0:20", "source": "agent",
                         })
 
@@ -1202,27 +1225,59 @@ def _section_music():
                     """
                     st_components.html(_gap_bar_html, height=28)
                 st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-                enh_c, gap_c, cort_c = st.columns(3)
-                with enh_c:
-                    st.markdown(
-                        '<p style="font-size:13px;font-weight:400;color:#31333F;margin:0 0 14px">Quality Enhance</p>',
-                        unsafe_allow_html=True,
-                    )
-                    st.toggle("Quality Enhance", value=False, key="auto_enhance",
-                              label_visibility="collapsed",
-                              on_change=lambda: _log(f'Quality Enhance turned {"ON" if st.session_state.get("auto_enhance") else "OFF"}.', "info"))
-                with gap_c:
-                    st.number_input(
-                        "Transition (s)", min_value=0, max_value=60, value=10, key="song_gap",
-                        label_visibility="visible",
-                        on_change=lambda: _log(f'Transition gap set to {st.session_state.get("song_gap")}s.', "info"),
-                    )
-                with cort_c:
-                    st.number_input(
-                        "Cortina (s)", min_value=5, max_value=120, value=30, key="cortina_len",
-                        label_visibility="visible",
-                        on_change=lambda: _log(f'Cortina length set to {st.session_state.get("cortina_len")}s.', "info"),
-                    )
+                # 2026-05-01: wrapped in a fragment so slider changes don't trigger
+                # a full page rerun (which would re-render the audio iframe and
+                # interrupt the currently-playing song). The new value still flows
+                # into session_state immediately; render_audio_player picks it up
+                # on the next track auto-advance. Also unified the slider/toggle
+                # log entries to the "change" kind so they share the grey colour
+                # with the other user actions (move/remove/clear/add).
+                # 2026-05-01: in-fragment changes don't repaint the Session Log
+                # panel (it lives outside this fragment). To still give the user
+                # immediate confirmation, each change also fires st.toast — toasts
+                # render globally and appear right after the fragment rerun. The
+                # Session Log entry is still recorded via _log() and shows on the
+                # next full rerun.
+                def _on_qe_toggle():
+                    new = "ON" if st.session_state.get("auto_enhance") else "OFF"
+                    _log(f'Quality Enhance turned {new}.', "change")
+                    st.toast(f'Quality Enhance {new}', icon='👤')
+
+                def _on_gap_change():
+                    v = st.session_state.get("song_gap")
+                    _log(f'Transition gap set to {v}s (applies to next track).', "change")
+                    st.toast(f'Transition gap set to {v}s — applies to next track', icon='👤')
+
+                def _on_cortina_change():
+                    v = st.session_state.get("cortina_len")
+                    _log(f'Cortina length set to {v}s (applies to next cortina).', "change")
+                    st.toast(f'Cortina length set to {v}s — applies to next cortina', icon='👤')
+
+                @st.fragment
+                def _audio_settings_fragment():
+                    enh_c, gap_c, cort_c = st.columns(3)
+                    with enh_c:
+                        st.markdown(
+                            '<p style="font-size:13px;font-weight:400;color:#31333F;margin:0 0 14px">Quality Enhance</p>',
+                            unsafe_allow_html=True,
+                        )
+                        st.toggle("Quality Enhance", value=False, key="auto_enhance",
+                                  label_visibility="collapsed",
+                                  on_change=_on_qe_toggle)
+                    with gap_c:
+                        st.number_input(
+                            "Transition (s)", min_value=0, max_value=60, value=10, key="song_gap",
+                            label_visibility="visible",
+                            on_change=_on_gap_change,
+                        )
+                    with cort_c:
+                        st.number_input(
+                            "Cortina (s)", min_value=5, max_value=120, value=30, key="cortina_len",
+                            label_visibility="visible",
+                            on_change=_on_cortina_change,
+                        )
+
+                _audio_settings_fragment()
 
         # ── Row 2: ENERGY ARC (full width of main_col) ──
         _hr()

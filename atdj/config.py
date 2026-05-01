@@ -18,7 +18,7 @@ CHROMA_DIR       = DATA_DIR / "chroma_db"               # ChromaDB store (RAG)
 KNOWLEDGE_DIR    = DATA_DIR / "knowledge_base"           # RAG .md domain knowledge files
 
 # --- LLM provider selection (set LLM_PROVIDER in .env) ---
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "claude")  # "gemini" | "claude" | "ollama"
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "claude")  # "claude" | "gemini" (only Claude and Gemini are wired in get_ui_llm())
 
 # --- Anthropic / Claude ---
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")

@@ -28,6 +28,17 @@ Fix:
 - Added `PlaybackQueue.clear()` to `atdj/playback/player.py` — wipes items, resets `_current_index` to 0, sets `_is_playing` to False, all in one place.
 - Switched `atdj/ui/page_main.py:1199` from `pq.items.clear()` to `pq.clear()`.
 
+### Cortina selection flows from agent → UI
+The `cortina_selector` node previously logged its choice but didn't propagate it to the UI, so the playlist always rendered each agent-inserted cortina row with a generic `"Cortina"` title — and the `PlaybackQueue` resolver fell back to the first file alphabetically, so the displayed name and the played file silently disagreed. New flow:
+
+- `atdj/agent/state.py` — added `selected_cortinas: Annotated[list[dict], operator.add]` to `AgentState`. Each entry: `{title, filename, duration_seconds}`.
+- `atdj/agent/nodes.py:cortina_selector` (Tina) — original return preserved as a comment; the new return additionally writes `{"selected_cortinas": [{...}]}` per call. The `operator.add` reducer accumulates selections in tanda order.
+- `atdj/ui/page_main.py` — when building `new_playlist`, the Nth cortina's title is read from `final_state["selected_cortinas"][N]` instead of being hardcoded to `"Cortina"` or randomly picked at the UI. `PlaybackQueue._resolve_cortina` matches the title → file → display name now equals the file that actually plays.
+
+The selection algorithm itself (`atdj/agent/tools.py:select_cortina` — currently `cortinas.sample(1)`) is **untouched** — the data-flow plumbing is what's fixed here. The selection logic gets a separate tune later.
+
+Provider/model dropdown also slimmed in the sidebar to `Claude` and `Gemini` only — `atdj/config.get_ui_llm()` only wires those two backends, so `Ollama` and the `"Others"` custom-text option were removed.
+
 ### Session Log redesign — categorized + collapsed
 The on-screen Session Log was hard to read: each PLAN tanda emitted 3–5 lines (`[session_init]`, `[tanda_planner]`, `[cortina_selector]`, `[queue_publisher]`, `[session_summary]`), each audio adjustment emitted 4 lines from internal nodes, internal IDs and file paths leaked to the UI, and there was no easy way to tell which entry came from PLAN vs AUDIO vs the user. Redesign:
 

@@ -178,6 +178,20 @@ class PlaybackQueue:
                 self._current_index = max(0, len(self._items) - 1)
         return True
 
+    def clear(self) -> None:
+        # Reset cursor and playback flag too — otherwise a stale _current_index
+        # left over from earlier playback can survive the wipe and point past the
+        # end of any subsequently-appended tracks, leaving Now Playing empty.
+        self._items = []
+        self._current_index = 0
+        self._is_playing = False
+
+    def jump_to(self, index: int) -> bool:
+        if index < 0 or index >= len(self._items):
+            return False
+        self._current_index = index
+        return True
+
     def to_session_state(self) -> dict:
         return {
             "items": self._items,

@@ -191,25 +191,12 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
         )
         return
 
-    # Normalize energy to [0, 1] using catalog min/max
-    # NOTE: must use the RAG catalog (reduced_catalog.csv) — that's the catalog the planner
-    # pulls track-level `energy` from, and `_load_catalog()` returns the playback catalog
-    # with no `energy` column, which silently fell through to a wrong fallback range.
-    try:
-        cat = _get_rag_catalog()
-        e_vals = cat["energy"].dropna().astype(float)
-        e_min, e_max = float(e_vals.min()), float(e_vals.max())
-    except Exception:
-        e_min, e_max = 0.0, 1.0
-
     def _norm_energy(s: dict) -> tuple[float, bool]:
-        """Return (normalised 0-1 value, has_real_energy)."""
+        """Return (energy_composite value in [0,1], has_real_energy)."""
         raw = s.get("energy")
         if raw is not None:
             try:
-                v = float(raw)
-                norm = (v - e_min) / (e_max - e_min) if e_max > e_min else 0.5
-                return norm, True
+                return float(raw), True
             except (ValueError, TypeError):
                 pass
         return 0.5, False   # unknown → mid-point, flagged as estimated
@@ -1196,7 +1183,7 @@ def _section_music():
         with clear_col:
             if pq.items and st.button("Clear", key="pl_clear_all", help="Clear all tracks", use_container_width=True):
                 _log(f'Cleared playlist ({len(pq.items)} tracks).', "change")
-                pq.items.clear()
+                pq.clear()
                 _save_pq(pq)
                 st.rerun()
         playlist = pq.items
@@ -1209,7 +1196,7 @@ def _section_music():
                 if item["type"] == "cortina":
                     b_src_c = _source_icon(item.get("source", "agent"))
                     b_cort  = _badge_sm("C", "#EEEEEE", "#888888")
-                    sc_c, cb1, cb2, cb3 = st.columns([20, 1, 1, 1])
+                    sc_c, cb0, cb1, cb2, cb3 = st.columns([19, 1, 1, 1, 1])
                     c_mins, c_secs = divmod(cortina_len, 60)
                     c_dur_str = f"{c_mins}:{c_secs:02d}"
                     with sc_c:
@@ -1224,6 +1211,13 @@ def _section_music():
                             f'</div>',
                             unsafe_allow_html=True,
                         )
+                    with cb0:
+                        if i != pq.current_index:
+                            if st.button("▶", key=f"pl_play_{i}", help="Jump to this cortina", use_container_width=True):
+                                pq.jump_to(i)
+                                _save_pq(pq)
+                                _log(f'Jumped to "{item["title"]}".', "change")
+                                st.rerun()
                     with cb1:
                         if i > 0:
                             if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
@@ -1258,7 +1252,7 @@ def _section_music():
 
                 is_current = (i == pq.current_index)
                 if is_current:
-                    sc, _b1, _b2, _b3 = st.columns([20, 1, 1, 1])
+                    sc, _b0, _b1, _b2, _b3 = st.columns([19, 1, 1, 1, 1])
                     with sc:
                         st.markdown(
                             f'<div style="padding:5px 8px;border-left:3px solid {clr};'
@@ -1276,7 +1270,7 @@ def _section_music():
                 else:
                     prev_s = next((j for j in range(i - 1, -1, -1) if playlist[j]["type"] != "cortina"), -1)
                     next_s = next((j for j in range(i + 1, len(playlist)) if playlist[j]["type"] != "cortina"), -1)
-                    sc, b1, b2, b3 = st.columns([20, 1, 1, 1])
+                    sc, b0, b1, b2, b3 = st.columns([19, 1, 1, 1, 1])
                     with sc:
                         st.markdown(
                             f'<div style="padding:5px 8px;border-left:2px solid {clr}88;'
@@ -1290,6 +1284,12 @@ def _section_music():
                             f'</div>',
                             unsafe_allow_html=True,
                         )
+                    with b0:
+                        if st.button("▶", key=f"pl_play_{i}", help="Jump to this track", use_container_width=True):
+                            pq.jump_to(i)
+                            _save_pq(pq)
+                            _log(f'Jumped to "{item["title"]}".', "change")
+                            st.rerun()
                     with b1:
                         if prev_s >= 0 and prev_s != pq.current_index:
                             if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):

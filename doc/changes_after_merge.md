@@ -19,6 +19,15 @@ The two dropdowns next to the chat textarea — *Context* (`Any / Tanda Planning
 - `tests/UI_TEST_GUIDE.md`: dropped "Set context to ..." instructions from steps 2.1, 2.8, 3.1, 4.1, 4.3, 9.1, 9.2.1; collapsed Test 9.1 (Routing) from three sub-steps to one; reworded the common-issues fix for misrouted `back to default`.
 - `atdj/agent/nodes.py` (Tina): the `"planning_mode"` key on the session-summary log dict was **commented out** (not deleted) per the teammate-edit rule. It used `getattr(..., default=...)` so it would not have crashed after the schema change, but logging a removed field is misleading.
 
+### Now Playing empty after Clear → re-plan — fixed in `atdj/playback/player.py` + `atdj/ui/page_main.py`
+Discovered while running Test 5 (the Clear button + re-plan flow). After clicking **Clear** in the playlist header, then planning a fresh tanda, the playlist filled with new tracks but Now Playing kept showing the empty placeholder — and there was no affordance to manually pick a track to play.
+
+Root cause: `pq.items.clear()` empties `_items` in place but leaves `_current_index` at whatever it was (e.g. 27 after a long milonga session of moves/removes). On the next plan, `pq.items.extend(new_playlist)` adds 4 tracks → `current_index=27 >= len(items)=4` → `current_track()` returns `None` → Now Playing renders the placeholder.
+
+Fix:
+- Added `PlaybackQueue.clear()` to `atdj/playback/player.py` — wipes items, resets `_current_index` to 0, sets `_is_playing` to False, all in one place.
+- Switched `atdj/ui/page_main.py:1199` from `pq.items.clear()` to `pq.clear()`.
+
 ### Q&A path import fix — `atdj/rag/store.py` (Nancy)
 Discovered while running Test 4 (Q&A path) end-to-end for the first time. Importing `atdj.rag.query` failed at module load with `TypeError: unsupported operand type(s) for |: 'function' and 'NoneType'`, traced to:
 

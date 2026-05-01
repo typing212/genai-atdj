@@ -96,6 +96,7 @@ Until a key is entered, chat / planning requests will fail.
 | 2.6 | Check `data/log/` directory | A new `session_log_<timestamp>.json` file appears for this run; `doc/` does **not** receive any session log files | PASS (2026-04-29) | — |
 | 2.7 | Send a second plan (e.g. `Plan a tanda of Di Sarli tangos from the 1940s`) | New tracks **append** to the existing playlist (don't overwrite); cortina row inserted between tandas | PASS (2026-04-30) | 6.7s |
 | 2.8 | Type `Plan me a full milonga session` | Classifier routes to PLAN; multiple tandas across styles appear | PASS (2026-04-30) | 33.8s |
+| 2.9 | Click **Clear** to empty the playlist, then send a new plan (e.g. `Plan a tanda of D'Arienzo tangos`) | Now Playing populates with the new first track (does **not** stay on the empty placeholder). Regression test for the cursor-stale bug fixed 2026-04-30 in `PlaybackQueue.clear()`. | PASS (2026-04-30) | 5.6s |
 
 ---
 
@@ -147,6 +148,7 @@ Until a key is entered, chat / planning requests will fail.
 | 5.6 | Change **Transition (s)** | `Transition gap set to Xs.` | PASS (2026-04-30) | 0.9s |
 | 5.7 | Change **Cortina (s)** | `Cortina length set to Xs.` | PASS (2026-04-30) | 0.9s |
 | 5.8 | All entries have a `HH:MM:SS` timestamp | every row prefixed with `HH:MM:SS` (Tina's ISO format normalized) | PASS (2026-04-30) | — |
+| 5.9 | Click ▶ on a non-current playlist row | `Jumped to "<title>".`; Now Playing card switches to that track (cursor jumps; audio does not auto-start) | PASS (2026-04-30) | 2.4s |
 
 ---
 

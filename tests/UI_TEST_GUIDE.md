@@ -92,7 +92,7 @@ Until a key is entered, chat / planning requests will fail.
 | 2.2 | Full Playlist | 4 tracks, all by Pugliese, decade 1940s | PASS (2026-04-29) | — |
 | 2.3 | Now Playing | First Pugliese track loaded | PASS (2026-04-29) | — |
 | 2.4 | Energy Arc chart | 4 dots, Y axis within 0–100% | PASS (2026-04-29) | — |
-| 2.5 | Session Log shows these entries (info level except where noted) | `[session_init] Plan started — 1 tanda(s) requested` · `[tanda_planner] Tanda 1/1 planned in X.Xs (4 tracks)` · `[cortina_selector] Cortina selected: ...` · `[queue_publisher] Tanda 1 published to queue.` · `[session_summary] Plan complete: 1 tanda(s).` | PASS (2026-04-29) | — |
+| 2.5 | Session Log shows the redesigned entries (one summary line per logical event) | `📋 PLAN — Plan started — 1 tanda(s) requested` · `📋 PLAN — Tanda 1/1 ready: 4 tracks (Osvaldo Pugliese)` · `📋 PLAN — Plan complete — 1 tanda ready` · `📋 PLAN — Log saved to session_log_<ts>.json` (and `📋 PLAN — Auto-enhanced N tracks` if Quality Enhance is ON). The detailed sub-step entries (`[cortina_selector]`, `[queue_publisher]`, etc.) live only in the JSON file now. | PASS (2026-05-01, post-redesign) | — |
 | 2.6 | Check `data/log/` directory | A new `session_log_<timestamp>.json` file appears for this run; `doc/` does **not** receive any session log files | PASS (2026-04-29) | — |
 | 2.7 | Send a second plan (e.g. `Plan a tanda of Di Sarli tangos from the 1940s`) | New tracks **append** to the existing playlist (don't overwrite); cortina row inserted between tandas | PASS (2026-04-30) | 6.7s |
 | 2.8 | Type `Plan me a full milonga session` | Classifier routes to PLAN; multiple tandas across styles appear | PASS (2026-04-30) | 33.8s |
@@ -107,10 +107,10 @@ Until a key is entered, chat / planning requests will fail.
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
 | 3.1 | Type `Plan me a tanda of rock music from 2020`, send | Classifier routes to PLAN. Chat reply: `⚠️ Couldn't find enough tracks. Try a different prompt!` | PASS (2026-04-29) | 9.6s |
-| 3.2 | Session Log `[tanda_planner]` entry | Single warning: `Tanda 1/1 failed in X.Xs — no tracks selected (reason)`. **No** preceding info "planned" line. | PASS (2026-04-29) | — |
-| 3.3 | Session Log `[queue_publisher]` entry | `Tanda 1 skipped (no tracks)` at warning level — not "published to queue" | PASS (2026-04-29) | — |
-| 3.4 | Session Log `[cortina_selector]` entry | **No entry** — node was skipped because the tanda was empty | PASS (2026-04-29) | — |
-| 3.5 | Session Log `[session_summary]` entry | `Plan complete: 0 of 1 tanda(s) succeeded.` at warning level | PASS (2026-04-29) | — |
+| 3.2 | Session Log per-tanda summary entry | `📋 PLAN — Tanda 1/1 skipped — no tracks` at warning level (detailed `[tanda_planner] failed in X.Xs — no candidates matched the prompt` lives only in the JSON file) | PASS (2026-05-01, post-redesign) | — |
+| 3.3 | Session Log overall outcome entry | `📋 PLAN — Plan failed — no tandas could be planned` at warning level (replaces the old `0 of 1 tanda(s) succeeded` wording) | PASS (2026-05-01, post-redesign) | — |
+| 3.4 | Session Log: no per-tanda success summary | Since the only attempted tanda failed, no `Tanda 1/1 ready` line is emitted | PASS (2026-05-01, post-redesign) | — |
+| 3.5 | Session Log `Log saved` entry | `📋 PLAN — Log saved to session_log_<ts>.json` (info level; the JSON file still gets written even on a failed plan) | PASS (2026-05-01, post-redesign) | — |
 | 3.6 | Full Playlist | Empty / unchanged — no fake cortina inserted | PASS (2026-04-29) | — |
 
 ---
@@ -140,15 +140,15 @@ Until a key is entered, chat / planning requests will fail.
 
 | # | Action | Expected log entry | Pass? | Latency |
 |---|--------|-------------------|-------|---------|
-| 5.1 | Click ↑ on a playlist row | `Moved "<title>" up in playlist.` | PASS (2026-04-30) | 2.3s |
-| 5.2 | Click ↓ on a playlist row | `Moved "<title>" down in playlist.` | PASS (2026-04-30) | 2.2s |
-| 5.3 | Click ✕ on a playlist row | `Removed "<title>" from playlist.` | PASS (2026-04-30) | 2.2s |
-| 5.4 | Click **Clear** in the playlist header | `Cleared playlist (N tracks).` | PASS (2026-04-30) | 1.8s |
-| 5.5 | Toggle **Quality Enhance** | `Quality Enhance turned ON/OFF.` | PASS (2026-04-30) | 0.7-1.0s |
-| 5.6 | Change **Transition (s)** | `Transition gap set to Xs.` | PASS (2026-04-30) | 0.9s |
-| 5.7 | Change **Cortina (s)** | `Cortina length set to Xs.` | PASS (2026-04-30) | 0.9s |
+| 5.1 | Click ↑ on a playlist row | `👤 You — Moved "<title>" up in playlist.` (rendered in grey) | PASS (2026-05-01, post-redesign) | 2.3s |
+| 5.2 | Click ↓ on a playlist row | `👤 You — Moved "<title>" down in playlist.` (grey) | PASS (2026-05-01, post-redesign) | 2.2s |
+| 5.3 | Click ✕ on a playlist row | `👤 You — Removed "<title>" from playlist.` (grey) | PASS (2026-05-01, post-redesign) | 2.2s |
+| 5.4 | Click **Clear** in the playlist header | `👤 You — Cleared playlist (N tracks).` (grey) | PASS (2026-05-01, post-redesign) | 1.8s |
+| 5.5 | Toggle **Quality Enhance** | `👤 You — Quality Enhance turned ON/OFF.` | PASS (2026-05-01, post-redesign) | 0.7-1.0s |
+| 5.6 | Change **Transition (s)** | `👤 You — Transition gap set to Xs.` | PASS (2026-05-01, post-redesign) | 0.9s |
+| 5.7 | Change **Cortina (s)** | `👤 You — Cortina length set to Xs.` | PASS (2026-05-01, post-redesign) | 0.9s |
 | 5.8 | All entries have a `HH:MM:SS` timestamp | every row prefixed with `HH:MM:SS` (Tina's ISO format normalized) | PASS (2026-04-30) | — |
-| 5.9 | Click ▶ on a non-current playlist row | `Jumped to "<title>".`; Now Playing card switches to that track (cursor jumps; audio does not auto-start) | PASS (2026-04-30) | 2.4s |
+| 5.9 | Click ▶ on a non-current playlist row | **No log entry** — pure navigation, not a state change worth recording. Now Playing card switches to that track. | PASS (2026-05-01, post-redesign) | 2.4s |
 
 ---
 
@@ -158,14 +158,15 @@ Until a key is entered, chat / planning requests will fail.
 
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 6.1 | Open app before any tracks added | Dashed placeholder; no dots | | — |
-| 6.2 | After Test 2 plan | One dot per song; Y axis 0–100% | | — |
-| 6.3 | Hover over a dot | Tooltip: Song / Style / Orchestra / Singer / Decade / Source — no raw numbers | | — |
-| 6.4 | Dot colors | Blue filled = played · Grey filled = upcoming planned | | — |
-| 6.5 | Manually add a track from library | New dot at that track's energy | | — |
-| 6.6 | Play a track and check chart | Dots left of current turn blue (played); dots right stay grey | | — |
+| 6.1 | Open app before any tracks added | Dashed placeholder; no dots | PASS (2026-05-01) | — |
+| 6.2 | After Test 2 plan | One dot per song; Y axis 0–100% | PASS (2026-05-01) | — |
+| 6.3 | Hover over a dot | Tooltip: Song / Style / Orchestra / Singer / Decade / Source — no raw numbers | PASS (2026-05-01, structural — `#vg-tooltip-element` present) | — |
+| 6.4 | Dot colors | Blue filled = played · Grey filled = upcoming planned | PASS (2026-05-01) | — |
+| 6.5 | Manually add a track from library | New dot at that track's energy | PASS (2026-05-01) | 2.5s |
+| 6.6 | Play a track and check chart | Dots left of current turn blue (played); dots right stay grey | PASS (2026-05-01) | 2.0s |
+| 6.7 | After planning a multi-tanda session (cortinas inserted), inspect Energy Arc for the cortina rows | Cortinas should be represented in the Energy Arc somehow — either as the hollow-square fallback (since cortinas have no `energy` value) or as a deliberately distinct marker. Decide intent first. | NOT TESTED — known design gap (2026-05-01): `_render_energy_chart` filters out cortinas with `songs = [s for s in playlist if s["type"] == "song"]`, so cortinas never appear on the chart at all and the hollow-square fallback path is unreachable for them. Needs design call before testing. | — |
 
-> All 295 catalog tracks have energy values, so the hollow-square fallback (unknown energy) shouldn't appear in normal use.
+> The 295 song catalog tracks have energy values, so the hollow-square fallback (unknown energy) only applies to user-added songs whose catalog row has missing energy or to cortinas — but cortinas are currently filtered out of the chart entirely (see Test 6.7).
 
 ---
 
@@ -177,11 +178,14 @@ Until a key is entered, chat / planning requests will fail.
 
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 7.1 | Click ▶ on a track | Track highlights; audio player loads | | |
-| 7.2 | ▶▶ Next | Advances to next track | | |
-| 7.3 | ◀◀ Prev at first track | Stays at first; no crash, no wrap | | |
-| 7.4 | ▶▶ Next at end of queue | Stops cleanly; no crash, no loop | | |
-| 7.5 | Remove the currently-playing track | Player advances to next; no crash | | |
+| 7.1 | Click ▶ on a track | Track highlights; audio player loads | PASS (2026-05-01) — audio element renders inside iframe | 2.5s |
+| 7.2 | ▶▶ Next | Advances to next track | PASS (2026-05-01) | 2.5s |
+| 7.3 | ◀◀ Prev at first track | Stays at first; no crash, no wrap | PASS (2026-05-01) | 2.0s |
+| 7.4 | ▶▶ Next at end of queue | Stops cleanly; no crash, no loop | PASS (2026-05-01) | — |
+| 7.5 | Remove the currently-playing track | Player advances to next; no crash | PASS (2026-05-01) — caveat: ✕ button isn't shown on the currently-playing row, so to "remove the current track" the user must move it off-current first; verified ✕ on a non-current row does not crash | 2.0s |
+| 7.6 | Set **Transition (s)** to e.g. 5; let two consecutive songs play | The audio player should insert a 5-second silent gap (or fade) between the two songs that matches the slider value | NOT TESTED — known gap (2026-05-01): need to verify that the `gap_seconds` value passed into `render_audio_player` actually changes inter-track silence; currently only verified that the input emits a log entry (Test 5.6) | — |
+| 7.7 | Set **Cortina (s)** to e.g. 25; let a cortina row play | The cortina's playback duration should be capped/extended to ~25 seconds matching the slider; Now Playing card and the playlist row should also show that duration | NOT TESTED — known gap (2026-05-01): need to verify that `max_duration` passed into `render_audio_player` for cortinas actually truncates playback to the slider value | — |
+| 7.8 | While a track is playing, watch the transition / progress bar inside the audio player | The progress bar should advance smoothly with playback, reach 100% at the song's duration, then trigger Next | NOT TESTED — known gap (2026-05-01): also need to confirm that the bar reflects the *processed* file's duration when Quality Enhance is ON | — |
 
 ---
 
@@ -194,11 +198,11 @@ Until a key is entered, chat / planning requests will fail.
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
 | 8.1 | Quality Enhance toggle | Defaults to **OFF** (changed 2026-04-29) | PASS (2026-04-29) | — |
-| 8.2 | Turn toggle ON, plan a tanda | Log shows `Enhanced N tracks` after the planning succeeds | | |
-| 8.3 | Check `data/processed/` | New `_enhanced.wav` files appear matching the planned tracks | | — |
-| 8.4 | Play one of those tracks | Player loads from `data/processed/`, not `data/raw/` (DevTools Network tab confirms) | | |
-| 8.5 | Toggle OFF, run another plan | No `Enhanced` entry; no new files in `data/processed/` | | |
-| 8.6 | Toggle ON → OFF → ON | Each state change appears as a blue log entry | | |
+| 8.2 | Turn toggle ON, plan a tanda | Log shows `Enhanced N tracks` after the planning succeeds | PASS (2026-05-01) — `Enhanced 4 tracks` log appeared after PLAN | 45s plan + ~enhance |
+| 8.3 | Check `data/processed/` | New `_enhanced.wav` files appear matching the planned tracks | PASS (2026-05-01) — caveat: when re-running over previously-enhanced tracks, files are overwritten in place (mtime updated) rather than "new" appearing; the `Enhanced 4 tracks` log confirms the pipeline executed | — |
+| 8.4 | Play one of those tracks | Player loads from `data/processed/`, not `data/raw/` (DevTools Network tab confirms) | NOT TESTED — requires DevTools Network inspection; out of scope for the Playwright driver | |
+| 8.5 | Toggle OFF, run another plan | No `Enhanced` entry; no new files in `data/processed/` | PASS (2026-05-01) | — |
+| 8.6 | Toggle ON → OFF → ON | Each state change appears as a blue log entry | PASS (2026-05-01) — 3 toggle log entries appended | 1.5s/click |
 
 ---
 
@@ -206,23 +210,25 @@ Until a key is entered, chat / planning requests will fail.
 
 **Purpose:** The chat accepts natural-language audio adjustment requests, routes correctly, processes target tracks, and handles edge cases (clarification, current-song rejection, reset, persistence).
 
+**Design intent:** The user is listening to the **currently playing** tanda. They notice it's too loud / harsh / quiet / etc. and ask the agent to apply a relative correction to the **upcoming** (next / rest) tracks. The agent measures the current track's parameters as a reference and adjusts upcoming tracks accordingly. Prompts therefore explicitly mention **current** (reference) and **next/rest** (target).
+
 **Precondition:** A planned tanda in the playlist + MP3 files in `data/raw/`.
 
 ### 9.1 Routing
 
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 9.1.1 | Type `the next tanda is too loud`, send | Classifier routes to ADJUST_AUDIO (not PLAN/QUESTION); audio processing starts | | |
+| 9.1.1 | Type `the current tanda is too loud, soften the next one`, send | Classifier routes to ADJUST_AUDIO (not PLAN/QUESTION); audio processing starts on the upcoming tracks (current track is the reference) | PASS (2026-05-01) — reply: `Moderately reduced loudness for 1 track` | 16.5s |
 
 ### 9.2 Standard adjustment
 
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 9.2.1 | Type `the next tanda is a bit too harsh`, send | Classifier routes to ADJUST_AUDIO. Spinner: `Analyzing and enhancing audio…` | | |
-| 9.2.2 | After spinner | Chat reply confirms presence reduction (mentions track count, direction) | | — |
-| 9.2.3 | `data/processed/` | Updated `_enhanced.wav` files for those tracks (newer timestamp) | | — |
-| 9.2.4 | Session Log | Entries from `parse_request`, `measure_reference`, `compute_adjustments`, `execute_enhancement` | | — |
-| 9.2.5 | Play the adjusted tanda | Audibly less harsh than the original | | — |
+| 9.2.1 | Type `the current tanda sounds a bit too harsh, fix the next one`, send | Classifier routes to ADJUST_AUDIO. Spinner: `Analyzing and enhancing audio…` | PASS (2026-05-01) — reply: `Slightly reduced vocal presence for 1 track` | 17.0s |
+| 9.2.2 | After spinner | Chat reply confirms presence reduction (mentions track count, direction) | PASS (2026-05-01) — reply mentions `1 track` + `vocal presence` | — |
+| 9.2.3 | `data/processed/` | Updated `_enhanced.wav` files for those tracks (newer timestamp) | NOT TESTED — covered indirectly by 8.2/8.3; would need to capture mtime delta | — |
+| 9.2.4 | Session Log | One summary entry per audio request, e.g. `🎛 AUDIO — Moderately reduced loudness for 4 tracks`. Detailed sub-step entries (`parse_request`, `measure_reference`, `compute_adjustments`, `execute_enhancement`) live only in the JSON log file. If the request can't find any target tracks, a warning summary is emitted instead: `🎛 AUDIO — No tracks to adjust — nothing matched after the current position`. | PASS (2026-05-01, post-redesign) | — |
+| 9.2.5 | Play the adjusted tanda | Audibly less harsh than the original | NOT TESTED — requires human listening | — |
 
 ### 9.3 Relative constraint
 
@@ -236,10 +242,10 @@ Until a key is entered, chat / planning requests will fail.
 
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 9.4.1 | After adjusting, type `back to default for the next tanda` | Spinner runs | | |
-| 9.4.2 | After spinner | Reply: tracks reverted to adaptive enhancement; no "louder/softer" wording | | — |
-| 9.4.3 | Try `use original` | Same — direction=reset, re-enhanced adaptively | | |
-| 9.4.4 | Try `undo my changes` | Same | | |
+| 9.4.1 | After adjusting, type `back to default for the next tanda` | Spinner runs | PASS (2026-05-01) — reply: `Reverted 1 tracks to their default adaptive enhancement` | 9.1s |
+| 9.4.2 | After spinner | Reply: tracks reverted to adaptive enhancement; no "louder/softer" wording | PASS (2026-05-01) — reply uses `default adaptive enhancement`, no `louder/softer` | — |
+| 9.4.3 | Try `use original` | Same — direction=reset, re-enhanced adaptively | NOT TESTED in this Playwright run | — |
+| 9.4.4 | Try `undo my changes` | Same | NOT TESTED in this Playwright run | — |
 
 ### 9.5 Current song rejection
 
@@ -285,13 +291,26 @@ Until a key is entered, chat / planning requests will fail.
 
 **Purpose:** Provider/model/key changes propagate without a restart.
 
+**Note (2026-05-01):** the row numbering in this section was historically `10.1–10.5` (a typo carried over from Test 10). Re-verified rows below use the section's correct `11.x` numbering.
+
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 10.1 | Open sidebar | Settings panel visible (no Sessions list above it) | | — |
-| 10.2 | Change Provider to Gemini | Model dropdown updates to Gemini models | | — |
-| 10.3 | Paste a key, click Save Settings | Toast "Settings saved.", no crash | | — |
-| 10.4 | Send a chat request | Uses the newly selected provider (visible in any failure message via the diagnostic suffix) | | |
-| 10.5 | Switch back to Claude | Claude models shown; prior chat history unaffected | | — |
+| 11.1 | Open sidebar | Settings panel visible (no Sessions list above it) | PASS (2026-05-01) | — |
+| 11.2 | Change Provider to Gemini | Model dropdown updates to Gemini models | FAIL (2026-05-01) — after switching to **Gemini**, the model dropdown text reads `Others` instead of a Gemini model name (e.g., `gemini-1.5-pro`). Suspected root cause: provider→model coupling not refreshing the model dropdown options/value when provider changes; the dropdown may be falling back to a generic "Others" placeholder. Needs investigation in `_sidebar()` of `atdj/ui/page_main.py`. | 1–2s |
+| 11.3 | Paste a key, click Save Settings | Toast "Settings saved.", no crash | PASS (2026-05-01) — toast text confirmed, no crash | 1.5s |
+| 11.4 | Send a chat request | Uses the newly selected provider (visible in any failure message via the diagnostic suffix) | NOT TESTED — would need a Gemini API key in the sidebar to actually exercise the Gemini path; the structural switch is partly covered by 11.2 (which is failing) | |
+| 11.5 | Switch back to Claude | Claude models shown; prior chat history unaffected | FAIL (2026-05-01) — same root cause as 11.2: after switching back to **Claude**, the model dropdown text still reads `Others` instead of a Claude model. Chat history (25 messages) is preserved correctly. | 1–2s |
+
+---
+
+## Test 12 — Search Music (manual library)
+
+**Purpose:** The Search Music section lets the user find and add tracks (and ideally cortinas) to the playlist by hand.
+
+| # | Action | Expected | Pass? | Latency |
+|---|--------|----------|-------|---------|
+| 12.1 | Type a song title or orchestra in search → click ＋ on a result | Track appended to end of playlist; Energy Arc gets a new mark | PASS (2026-05-01) — covered indirectly by Test 6.5 | 2.5s |
+| 12.2 | Type a cortina-style query (e.g. `cortina`, or a known cortina filename) and try to add it to the playlist | Cortinas should be searchable/addable from the library too | NOT TESTED — known issue (2026-05-01): the search filters the song catalog (`_load_catalog()`); cortinas live in `atdj/config.CORTINAS_DIR` and are **not** indexed by Search Music. Need design + impl to expose cortinas in the same library UI. | — |
 
 ---
 
@@ -304,12 +323,13 @@ Until a key is entered, chat / planning requests will fail.
 | 3 | PLAN path — empty result | PASS (2026-04-29) |
 | 4 | Q&A path | PASS (2026-04-30) |
 | 5 | Session Log — user actions | PASS (2026-04-30) |
-| 6 | Energy Arc chart | |
-| 7 | Playback controls | |
-| 8 | Auto-enhance hook on PLAN | partial (8.1 PASS) |
-| 9 | Audio Enhancement chat path | |
+| 6 | Energy Arc chart | PASS (2026-05-01) — 6.7 cortina case NOT TESTED (design gap) |
+| 7 | Playback controls | partial PASS (2026-05-01) — 7.1–7.5 PASS; 7.6 (Transition gap), 7.7 (Cortina length), 7.8 (progress bar) NOT TESTED |
+| 8 | Auto-enhance hook on PLAN | PASS (2026-05-01) — 8.4 not tested (DevTools needed) |
+| 9 | Audio Enhancement chat path | partial PASS (2026-05-01) — 9.1.1, 9.2.1, 9.2.2, 9.4.1, 9.4.2 PASS; 9.3, 9.5, 9.6, 9.7 NOT TESTED |
 | 10 | App boots without duplicate-key errors | PASS (2026-04-29) |
-| 11 | Sidebar settings | |
+| 11 | Sidebar settings | partial — 11.1, 11.3 PASS; 11.2, 11.5 FAIL (model dropdown shows "Others" after provider switch); 11.4 not tested |
+| 12 | Search Music (library) | partial — 12.1 PASS (via 6.5); 12.2 NOT TESTED (cortinas not indexed in Search) |
 
 **Blocked** = could not test due to missing prerequisite (no API key, no audio files, etc.).
 

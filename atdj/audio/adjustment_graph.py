@@ -138,9 +138,12 @@ class AdjustmentState(TypedDict):
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _log(node: str, level: str, message: str) -> dict:
+def _log(node: str, level: str, message: str, summary: bool = False) -> dict:
+    # Original (Tina): no `summary` field. Added 2026-05-01 so the on-screen Session
+    # Log can filter to one user-facing line per audio adjustment while the JSON file
+    # still receives every sub-step for fault tracking.
     return {"timestamp": datetime.now().isoformat(), "node": node,
-            "level": level, "message": message}
+            "level": level, "message": message, "summary": summary}
 
 
 def _playlist_summary(playlist: list[dict], current_index: int) -> str:
@@ -323,7 +326,13 @@ def resolve_targets_node(state: AdjustmentState) -> dict:
 def no_targets_node(state: AdjustmentState) -> dict:
     return {
         "reply": "No tracks found matching that description after the current position.",
-        "activity_log": [_log("resolve_targets", "warning", "No target tracks found")],
+        "activity_log": [
+            _log("resolve_targets", "warning", "No target tracks found"),
+            # 2026-05-01: surface the no-targets case on the on-screen Session Log too
+            _log("resolve_targets", "warning",
+                 "No tracks to adjust — nothing matched after the current position",
+                 summary=True),
+        ],
     }
 
 
@@ -503,7 +512,13 @@ def format_reply(state: AdjustmentState) -> dict:
         deleted = results[0].get("deleted", 0) if results and "deleted" in results[0] else n
         return {
             "reply": f"Reverted {deleted if deleted else n} tracks to their default adaptive enhancement.",
-            "activity_log": [_log("format_reply", "info", "Formatted reset reply")],
+            "activity_log": [
+                _log("format_reply", "info", "Formatted reset reply"),
+                # 2026-05-01: summary entry for the on-screen Session Log
+                _log("format_reply", "info",
+                     f"Reset {deleted if deleted else n} track{'s' if (deleted if deleted else n) != 1 else ''} to default",
+                     summary=True),
+            ],
         }
 
     direction_word = "increased" if direction == "up" else "reduced"
@@ -525,9 +540,22 @@ def format_reply(state: AdjustmentState) -> dict:
     if state.get("store_intent"):
         reply += "\n\nThis preference will also apply to future session plans while Auto Enhance is on."
 
+    # 2026-05-01: build a concise on-screen summary line
+    summary_parts = []
+    if magnitude_label:
+        summary_parts.append(magnitude_label.capitalize())
+    summary_parts.append(direction_word)
+    summary_parts.append(feature_label)
+    summary_parts.append(f"for {n} track{'s' if n != 1 else ''}")
+    summary_msg = " ".join(summary_parts)
+
     return {
         "reply": reply,
-        "activity_log": [_log("format_reply", "info", f"Formatted reply for {n} tracks")],
+        "activity_log": [
+            _log("format_reply", "info", f"Formatted reply for {n} tracks"),
+            # On-screen summary entry
+            _log("format_reply", "info", summary_msg, summary=True),
+        ],
     }
 
 

@@ -13,12 +13,16 @@ def _get_llm():
     return get_ui_llm()
 
 
-def _log(node: str, level: str, message: str) -> dict:
+def _log(node: str, level: str, message: str, summary: bool = False) -> dict:
+    # Original (Tina): no `summary` field. Added 2026-05-01 so the on-screen
+    # Session Log can filter to one user-facing line per logical event while
+    # the JSON file still receives every sub-step for fault tracking.
     return {
         "timestamp": datetime.now().isoformat(),
         "node": node,
         "level": level,
         "message": message,
+        "summary": summary,
     }
 
 
@@ -61,8 +65,9 @@ def session_init(state: AgentState) -> dict:
         # Original (Tina) wording preserved below.
         # _log("session_init", "info", f"Session started — {total_tandas} tandas planned."),
         # _log("session_init", "info", f"Energy arc: {' → '.join(f'{e:.0%}' for e in energy_arc)}"),
+        # 2026-05-01: marked summary=True so this lone milestone surfaces on screen.
         "activity_log": [
-            _log("session_init", "info", f"Plan started — {total_tandas} tanda(s) requested."),
+            _log("session_init", "info", f"Plan started — {total_tandas} tanda(s) requested.", summary=True),
         ],
     }
 
@@ -195,6 +200,21 @@ def queue_publisher(state: AgentState) -> dict:
     msg = f"Tanda {idx + 1} skipped (no tracks)" if failed else f"Tanda {idx + 1} published to queue."
     level = "warning" if failed else "info"
 
+    # 2026-05-01: also emit a single summary entry per tanda for the on-screen log.
+    # Combines tanda planner + cortina + publish into one line ("Tanda K/N ready: N tracks (Orchestra)")
+    # so users see one line per tanda instead of three.
+    picked_per_tanda = state.get("picked_tracks") or []
+    this_tanda = picked_per_tanda[idx] if idx < len(picked_per_tanda) else []
+    if failed or not this_tanda:
+        summary_msg = f"Tanda {idx + 1}/{total} skipped — no tracks"
+        summary_level = "warning"
+    else:
+        track_count = len(this_tanda)
+        first = this_tanda[0] if this_tanda else {}
+        orch = first.get("orchestra") or "?"
+        summary_msg = f"Tanda {idx + 1}/{total} ready: {track_count} tracks ({orch})"
+        summary_level = "info"
+
     return {
         "current_tanda_index": idx + 1,
         "session_complete": session_complete,
@@ -202,6 +222,7 @@ def queue_publisher(state: AgentState) -> dict:
         "messages": [AIMessage(content=msg)],
         "activity_log": [
             _log("queue_publisher", level, msg),
+            _log("queue_publisher", summary_level, summary_msg, summary=True),
         ],
     }
 
@@ -274,18 +295,34 @@ def session_summary(state: AgentState) -> dict:
     #     ],
     # }
     successful = sum(1 for t in state.get("picked_tracks", []) if t)
-    if successful == total:
-        msg = f"Plan complete: {total} tanda(s)."
+    # Original (Tina) — preserved below. The single template "K of N tanda(s) succeeded."
+    # read awkwardly when K=0 (e.g. "0 of 1 succeeded" should read "failed"). 2026-05-01:
+    # branch the wording by outcome so each edge reads naturally.
+    # if successful == total:
+    #     msg = f"Plan complete: {total} tanda(s)."
+    #     level = "info"
+    # else:
+    #     msg = f"Plan complete: {successful} of {total} tanda(s) succeeded."
+    #     level = "warning"
+    failed_count = total - successful
+    if total == 0:
+        msg = "Plan completed — no tandas attempted"
+        level = "warning"
+    elif successful == total:
+        msg = f"Plan complete — {total} tanda{'s' if total != 1 else ''} ready"
         level = "info"
+    elif successful == 0:
+        msg = "Plan failed — no tandas could be planned"
+        level = "warning"
     else:
-        msg = f"Plan complete: {successful} of {total} tanda(s) succeeded."
+        msg = f"Plan complete — {successful} of {total} tandas ready ({failed_count} failed)"
         level = "warning"
 
     return {
         "last_agent_action": "session_complete",
-        "messages": [AIMessage(content=f"{msg} Log saved to {log_path.name}")],
+        "messages": [AIMessage(content=f"{msg}. Log saved to {log_path.name}")],
         "activity_log": [
-            _log("session_summary", level, msg),
-            _log("session_summary", "info", f"Log saved to {log_path.name}"),
+            _log("session_summary", level, msg, summary=True),
+            _log("session_summary", "info", f"Log saved to {log_path.name}", summary=True),
         ],
     }

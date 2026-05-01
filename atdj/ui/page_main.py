@@ -78,9 +78,12 @@ def _save_pq(pq: PlaybackQueue) -> None:
 
 
 def _log(text: str, kind: str = "info") -> None:
-    """Append a timestamped entry to the session log."""
+    """Append a timestamped entry to the session log. Auto-prefixes with the
+    👤 You category (so user actions are visually distinct from agent events)."""
     import datetime
     ts = datetime.datetime.now().strftime("%H:%M:%S")
+    if not text.startswith(("👤", "📋", "🎛")):
+        text = f"👤 You — {text}"
     st.session_state.setdefault("agent_notifications", []).append(
         {"type": kind, "text": text, "timestamp": ts}
     )
@@ -408,12 +411,13 @@ def _section_chat():
     with st.container(border=True):
         st.markdown('<div id="chat-input-card"></div>', unsafe_allow_html=True)
         _input_key = f"chat_text_input_{st.session_state.get('input_counter', 0)}"
-        msg_text = st.text_area(
-            "Message", placeholder="Message the agent…",
-            label_visibility="collapsed", key=_input_key,
-            height=87,
-        )
-        _, send_col = st.columns([6, 1])
+        text_col, _spacer, send_col = st.columns([11, 0.4, 1], vertical_alignment="bottom")
+        with text_col:
+            msg_text = st.text_area(
+                "Message", placeholder="Message the agent…",
+                label_visibility="collapsed", key=_input_key,
+                height=87,
+            )
         with send_col:
             st.markdown('<div id="send-btn-marker"></div>', unsafe_allow_html=True)
             send = st.button("➤", use_container_width=True, key="chat_send", help="Send")
@@ -591,11 +595,11 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                                 )
                                 enhance_tanda(track_paths, Path(PROCESSED_DIR), param_overrides=overrides)
                                 st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "decision", "text": f"Enhanced {len(track_paths)} tracks", "timestamp": ""}
+                                    {"type": "info", "text": f"📋 PLAN — Auto-enhanced {len(track_paths)} tracks", "timestamp": ""}
                                 )
                             except Exception as e:
                                 st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "warning", "text": f"Enhancement skipped: {e}", "timestamp": ""}
+                                    {"type": "warning", "text": f"📋 PLAN — Enhancement skipped: {e}", "timestamp": ""}
                                 )
 
                 songs = [t for t in new_playlist if t["type"] == "song"]
@@ -673,8 +677,13 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                 st.session_state["stored_adjustment_intent"] = final["intent_to_store"]
 
             for entry in final.get("activity_log", []):
+                # Only surface entries flagged as user-visible summaries; the JSON
+                # log file still receives every sub-step for fault tracking.
+                if not entry.get("summary"):
+                    continue
                 st.session_state.setdefault("agent_notifications", []).append(
-                    {"type": "info", "text": entry.get("message", ""),
+                    {"type": entry.get("level", "info"),
+                     "text": f"🎛 AUDIO — {entry.get('message', '')}",
                      "timestamp": entry.get("timestamp", "")}
                 )
 
@@ -1216,7 +1225,7 @@ def _section_music():
                             if st.button("▶", key=f"pl_play_{i}", help="Jump to this cortina", use_container_width=True):
                                 pq.jump_to(i)
                                 _save_pq(pq)
-                                _log(f'Jumped to "{item["title"]}".', "change")
+                                # 2026-05-01: no log entry — pure navigation, not a state change worth recording.
                                 st.rerun()
                     with cb1:
                         if i > 0:
@@ -1288,7 +1297,7 @@ def _section_music():
                         if st.button("▶", key=f"pl_play_{i}", help="Jump to this track", use_container_width=True):
                             pq.jump_to(i)
                             _save_pq(pq)
-                            _log(f'Jumped to "{item["title"]}".', "change")
+                            # 2026-05-01: no log entry — pure navigation, not a state change worth recording.
                             st.rerun()
                     with b1:
                         if prev_s >= 0 and prev_s != pq.current_index:
@@ -1322,21 +1331,24 @@ def _section_music():
         _lbl("Session Log")
         # Hoist any new activity_log entries (from Tina's LangGraph nodes) into the
         # agent_notifications list that this panel renders. Dedup on identical entries.
+        # 2026-05-01: filter to summary=True; raw [node_name] prefixes replaced
+        # with 📋 PLAN category prefix.
         if "activity_log" in st.session_state:
             for entry in st.session_state["activity_log"]:
+                if not entry.get("summary"):
+                    continue
                 notification = {
                     "type": entry.get("level", "info"),
-                    "text": f"[{entry.get('node', '?')}] {entry.get('message', '')}",
+                    "text": f"📋 PLAN — {entry.get('message', '')}",
                     "timestamp": entry.get("timestamp", ""),
                 }
                 if notification not in st.session_state["agent_notifications"]:
                     st.session_state["agent_notifications"].append(notification)
         notif_colors = {
-            "info": ("#E8F4FD", "#1A6FAD"),
-            "change": ("#FEF9E7", "#B7770D"),
-            "decision": ("#E8F8E8", "#2D8A4E"),
-            "warning": ("#FEF9E7", "#B7770D"),
-            "error": ("#FDE8E8", "#C44040"),
+            "info":    ("#E8F4FD", "#1A6FAD"),  # blue — agent informational entries
+            "change":  ("#F0F2F5", "#5A6C7E"),  # grey — user actions (was amber, conflicted with warning)
+            "warning": ("#FEF9E7", "#B7770D"),  # amber — reserved for failures / non-fatal problems
+            "error":   ("#FDE8E8", "#C44040"),  # red — exceptions
         }
         with st.container(height=150):
             for n in reversed(st.session_state["agent_notifications"]):

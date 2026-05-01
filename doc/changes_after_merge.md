@@ -28,6 +28,20 @@ Fix:
 - Added `PlaybackQueue.clear()` to `atdj/playback/player.py` — wipes items, resets `_current_index` to 0, sets `_is_playing` to False, all in one place.
 - Switched `atdj/ui/page_main.py:1199` from `pq.items.clear()` to `pq.clear()`.
 
+### Session Log redesign — categorized + collapsed
+The on-screen Session Log was hard to read: each PLAN tanda emitted 3–5 lines (`[session_init]`, `[tanda_planner]`, `[cortina_selector]`, `[queue_publisher]`, `[session_summary]`), each audio adjustment emitted 4 lines from internal nodes, internal IDs and file paths leaked to the UI, and there was no easy way to tell which entry came from PLAN vs AUDIO vs the user. Redesign:
+
+- **Categories with a prefix icon**: `📋 PLAN — …` (agent planning), `🎛 AUDIO — …` (agent audio enhancement), `👤 You — …` (user actions).
+- **Two-layer log model**: every sub-step entry is still written to the `data/log/session_log_*.json` file for fault tracking; the on-screen log shows only the **summary entries** (one per logical event).
+- **Schema change in `_log()` (Tina, both `atdj/agent/nodes.py` and `atdj/audio/adjustment_graph.py`)**: added a `summary: bool` field (default `False`) on each entry. Original lines are commented out; new alongside, per teammate-edit rule. Affected nodes:
+  - `session_init` — its single entry is marked `summary=True` (it IS the milestone)
+  - `queue_publisher` — keeps its detailed sub-step entry, *plus* emits one new `summary=True` entry per tanda combining tanda planner + cortina + publish into `Tanda K/N ready: N tracks (Orchestra)` (or `Tanda K/N skipped — no tracks` on failure)
+  - `session_summary` — wording branched by outcome: all-succeeded → `Plan complete — N tandas ready`; mixed → `Plan complete — K of N tandas ready (M failed)`; all-failed → `Plan failed — no tandas could be planned`. Both the wrap-up line and the `Log saved to …` line are `summary=True` (the user wants the log-saved line on screen).
+  - `format_reply` (audio) — keeps its detailed entry, *plus* emits one `summary=True` entry per audio request: e.g. `Slightly reduced vocal presence for 1 track`.
+- **`atdj/ui/page_main.py`**: filters all `activity_log` hoists to `summary=True`, prefixes PLAN entries with `📋 PLAN — `, audio entries with `🎛 AUDIO — `; the `_log()` user-action helper auto-prefixes with `👤 You — `; the auto-enhance success/failure entries inside the PLAN handler are now prefixed `📋 PLAN — Auto-enhanced …` / `📋 PLAN — Enhancement skipped: …`.
+- **Test 5.9 cleanup**: dropped the `_log` call in the new ▶ jump-to-track handlers (cortina + song rows) — jumping is pure navigation, not a state change worth logging.
+- **Documentation**: tests in `tests/UI_TEST_GUIDE.md` referencing the old log strings (Test 2.5, Test 3.2–3.5, Test 5.x, Test 9.2.4) are updated to the new format.
+
 ### Q&A path import fix — `atdj/rag/store.py` (Nancy)
 Discovered while running Test 4 (Q&A path) end-to-end for the first time. Importing `atdj.rag.query` failed at module load with `TypeError: unsupported operand type(s) for |: 'function' and 'NoneType'`, traced to:
 

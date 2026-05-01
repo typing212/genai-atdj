@@ -164,9 +164,9 @@ Until a key is entered, chat / planning requests will fail.
 | 6.4 | Dot colors | Blue filled = played · Grey filled = upcoming planned | PASS (2026-05-01) | — |
 | 6.5 | Manually add a track from library | New dot at that track's energy | PASS (2026-05-01) | 2.5s |
 | 6.6 | Play a track and check chart | Dots left of current turn blue (played); dots right stay grey | PASS (2026-05-01) | 2.0s |
-| 6.7 | After planning a multi-tanda session (cortinas inserted), inspect Energy Arc for the cortina rows | Cortinas should be represented in the Energy Arc somehow — either as the hollow-square fallback (since cortinas have no `energy` value) or as a deliberately distinct marker. Decide intent first. | NOT TESTED — known design gap (2026-05-01): `_render_energy_chart` filters out cortinas with `songs = [s for s in playlist if s["type"] == "song"]`, so cortinas never appear on the chart at all and the hollow-square fallback path is unreachable for them. Needs design call before testing. | — |
+| 6.7 | After planning a multi-tanda session (cortinas inserted), inspect Energy Arc for the cortina rows | Cortinas appear at their playlist position as hollow squares. Their y-position is **interpolated** between the nearest songs-with-energy on either side (linear interp; flat extrapolate at the start/end). Underlying `energy` stays `None` — the interpolated y is render-only. The energy line skips cortinas (filter `type=='song'`) so the curve doesn't dip through them. | PASS (2026-05-01) — verified 16 squares show 13 distinct y-positions across an 8-tanda plan, all within the song y-range (interpolation working) | — |
 
-> The 295 song catalog tracks have energy values, so the hollow-square fallback (unknown energy) only applies to user-added songs whose catalog row has missing energy or to cortinas — but cortinas are currently filtered out of the chart entirely (see Test 6.7).
+> The hollow-square fallback (unknown energy) applies to anything without a numeric `energy`: (a) user-added songs whose catalog row has missing energy, (b) cortinas (which have no energy data yet). The y-position is interpolated from neighbouring anchors so the square sits on the curve. The interpolation is render-only — the underlying item still has `energy=None`.
 
 ---
 
@@ -310,7 +310,7 @@ Until a key is entered, chat / planning requests will fail.
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
 | 12.1 | Type a song title or orchestra in search → click ＋ on a result | Track appended to end of playlist; Energy Arc gets a new mark | PASS (2026-05-01) — covered indirectly by Test 6.5 | 2.5s |
-| 12.2 | Type a cortina-style query (e.g. `cortina`, or a known cortina filename) and try to add it to the playlist | Cortinas should be searchable/addable from the library too | NOT TESTED — known issue (2026-05-01): the search filters the song catalog (`_load_catalog()`); cortinas live in `atdj/config.CORTINAS_DIR` and are **not** indexed by Search Music. Need design + impl to expose cortinas in the same library UI. | — |
+| 12.2 | Type a cortina-style query (e.g. `cortina`, or a known cortina filename like `sucker`) and click `＋` on a result to add it to the playlist | Cortina results render with a `C` badge (filename + " · cortina"); `＋` appends a `{"type": "cortina"}` entry to the end of the playlist; chart gains a hollow square at the cortina's playlist position; user log line: `👤 You — Added cortina "<filename>" to playlist end.` | PASS (2026-05-01) — verified `cortina` returns 6 matches; `sucker` returns 1 match; click `＋` adds the cortina (chart hollow squares went 3 → 4) | 2.0s |
 
 ---
 
@@ -323,13 +323,13 @@ Until a key is entered, chat / planning requests will fail.
 | 3 | PLAN path — empty result | PASS (2026-04-29) |
 | 4 | Q&A path | PASS (2026-04-30) |
 | 5 | Session Log — user actions | PASS (2026-04-30) |
-| 6 | Energy Arc chart | PASS (2026-05-01) — 6.7 cortina case NOT TESTED (design gap) |
+| 6 | Energy Arc chart | PASS (2026-05-01) — 6.7 cortina hollow-square fallback now wired up |
 | 7 | Playback controls | partial PASS (2026-05-01) — 7.1–7.5 PASS; 7.6 (Transition gap), 7.7 (Cortina length), 7.8 (progress bar) NOT TESTED |
 | 8 | Auto-enhance hook on PLAN | PASS (2026-05-01) — 8.4 not tested (DevTools needed) |
 | 9 | Audio Enhancement chat path | partial PASS (2026-05-01) — 9.1.1, 9.2.1, 9.2.2, 9.4.1, 9.4.2 PASS; 9.3, 9.5, 9.6, 9.7 NOT TESTED |
 | 10 | App boots without duplicate-key errors | PASS (2026-04-29) |
 | 11 | Sidebar settings | partial — 11.1, 11.3 PASS; 11.2, 11.5 FAIL (model dropdown shows "Others" after provider switch); 11.4 not tested |
-| 12 | Search Music (library) | partial — 12.1 PASS (via 6.5); 12.2 NOT TESTED (cortinas not indexed in Search) |
+| 12 | Search Music (library) | PASS (2026-05-01) — 12.1 PASS (via 6.5); 12.2 PASS — cortinas now searchable + addable |
 
 **Blocked** = could not test due to missing prerequisite (no API key, no audio files, etc.).
 

@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as st_components
 import atdj.config as cfg
-from atdj.config import CATALOG_PATH
+from atdj.config import CATALOG_PATH, CORTINAS_DIR
 from atdj.playback.player import PlaybackQueue
 from atdj.ui.audio_player import render_audio_player
 
@@ -178,11 +178,12 @@ def _lbl(text: str):
     )
 
 def _render_energy_chart(playlist: list, current_index: int = 0):
-    """Solid line = played · Dotted line = planned · Hover = song card."""
+    """Solid line = played · Dotted line = planned · Hover = song card.
+    Cortinas appear as hollow squares (visual fallback at 50%); their underlying
+    items keep `energy=None` — the 0.5 is render-only, never written back."""
     import altair as alt
 
-    songs = [s for s in playlist if s["type"] == "song"]
-    if not songs:
+    if not any(item.get("type") in ("song", "cortina") for item in playlist):
         st.markdown(
             '<div style="background:#F9F9F9;border:1px dashed #DEDEDE;border-radius:8px;'
             f'padding:16px;height:{EA_CHART_H}px;display:flex;flex-direction:column;'
@@ -194,42 +195,87 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
         )
         return
 
-    def _norm_energy(s: dict) -> tuple[float, bool]:
-        """Return (energy_composite value in [0,1], has_real_energy)."""
-        raw = s.get("energy")
+    # Pre-compute anchor y-values: any item (song OR cortina) that has a known
+    # numeric energy. Cortinas don't yet, so in practice this collects songs from
+    # the catalog. Used to interpolate the y-position of unknown-energy items so
+    # their hollow square sits on the energy curve instead of pinned to 50%.
+    # Render-only — never written back to the underlying playlist items.
+    _anchor_e_at: dict[int, float] = {}
+    for _i, _item in enumerate(playlist):
+        _raw = _item.get("energy")
+        if _raw is not None:
+            try:
+                _anchor_e_at[_i] = float(_raw)
+            except (ValueError, TypeError):
+                pass
+
+    def _interp_y(idx: int) -> float:
+        valid = sorted(_anchor_e_at.keys())
+        prev_i = max((i for i in valid if i < idx), default=None)
+        next_i = min((i for i in valid if i > idx), default=None)
+        if prev_i is not None and next_i is not None:
+            t = (idx - prev_i) / (next_i - prev_i)
+            return _anchor_e_at[prev_i] + t * (_anchor_e_at[next_i] - _anchor_e_at[prev_i])
+        if prev_i is not None:
+            return _anchor_e_at[prev_i]
+        if next_i is not None:
+            return _anchor_e_at[next_i]
+        return 0.5  # ultimate fallback: no anchors at all
+
+    def _energy_for_render(idx: int, item: dict) -> tuple[float, bool]:
+        """Return (display y-position in [0,1], has_real_energy).
+        Items with no real energy get an interpolated y based on neighbouring
+        anchors — visual smoothing only, the underlying `energy` stays None."""
+        raw = item.get("energy")
         if raw is not None:
             try:
                 return float(raw), True
             except (ValueError, TypeError):
                 pass
-        return 0.5, False   # unknown → mid-point, flagged as estimated
+        return _interp_y(idx), False
 
-    # Map playlist-level current_index to song-only index
-    song_indices = [i for i, s in enumerate(playlist) if s["type"] == "song"]
-    playing_pos = 0
-    for si, pi in enumerate(song_indices):
-        if pi >= current_index:
-            playing_pos = si
-            break
+    playing_pos = current_index  # x-axis uses playlist index directly now (cortinas keep their slot)
     records = []
-    for idx, s in enumerate(songs):
-        decade = f"{(int(s['year']) // 10) * 10}s" if s.get("year") else "—"
-        energy_val, has_energy = _norm_energy(s)
-        base_rec = {
-            "pos":        idx,
-            "title":      s["title"],
-            "orchestra":  s["orchestra"],
-            "singer":     s.get("singer", "—") or "—",
-            "style":      s["style"],
-            "decade":     decade,
-            "source":     "💡 Agent" if s.get("source") == "agent" else "👤 You",
-            "energy":     energy_val,
-            "has_energy": has_energy,
-            "segment":    "played" if idx <= playing_pos else "planned",
-        }
-        records.append(base_rec)
-        if idx == playing_pos:
-            records.append({**base_rec, "segment": "planned"})
+    for idx, item in enumerate(playlist):
+        item_type = item.get("type")
+        if item_type not in ("song", "cortina"):
+            continue
+        if item_type == "song":
+            decade = f"{(int(item['year']) // 10) * 10}s" if item.get("year") else "—"
+            energy_val, has_energy = _energy_for_render(idx, item)
+            base_rec = {
+                "pos":        idx,
+                "type":       "song",
+                "title":      item["title"],
+                "orchestra":  item["orchestra"],
+                "singer":     item.get("singer", "—") or "—",
+                "style":      item["style"],
+                "decade":     decade,
+                "source":     "💡 Agent" if item.get("source") == "agent" else "👤 You",
+                "energy":     energy_val,
+                "has_energy": has_energy,
+                "segment":    "played" if idx <= playing_pos else "planned",
+            }
+            records.append(base_rec)
+            if idx == playing_pos:
+                records.append({**base_rec, "segment": "planned"})
+        else:  # cortina
+            # Underlying item keeps energy=None — the y here is render-only,
+            # interpolated between neighbouring songs so the square sits on the curve.
+            energy_val, has_energy = _energy_for_render(idx, item)
+            records.append({
+                "pos":        idx,
+                "type":       "cortina",
+                "title":      item.get("title", "Cortina"),
+                "orchestra":  "—",
+                "singer":     "—",
+                "style":      "CORTINA",
+                "decade":     "—",
+                "source":     "💡 Agent" if item.get("source") == "agent" else "👤 You",
+                "energy":     energy_val,
+                "has_energy": has_energy,
+                "segment":    "played" if idx <= playing_pos else "planned",
+            })
 
     df = pd.DataFrame(records)
     base = alt.Chart(df).encode(
@@ -239,7 +285,7 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
                 axis=alt.Axis(title=None, format=".0%", tickCount=3,
                               gridColor="#F5F5F5", domainColor="#DDD")),
         tooltip=[
-            alt.Tooltip("title:N",     title="Song"),
+            alt.Tooltip("title:N",     title="Title"),
             alt.Tooltip("style:N",     title="Style"),
             alt.Tooltip("orchestra:N", title="Orchestra"),
             alt.Tooltip("singer:N",    title="Singer"),
@@ -247,16 +293,17 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
             alt.Tooltip("source:N",    title="Source"),
         ],
     )
+    # Lines connect songs only — cortinas are visual markers and shouldn't pull the energy curve through them
     played_line  = base.mark_line(color="#1A5294", strokeWidth=2.5).transform_filter(
-        alt.datum.segment == "played"
+        "datum.type == 'song' && datum.segment == 'played'"
     )
     planned_line = base.mark_line(color="#BBBBBB", strokeWidth=2,
                                   strokeDash=[5, 4]).transform_filter(
-        alt.datum.segment == "planned"
+        "datum.type == 'song' && datum.segment == 'planned'"
     )
-    # Known-energy tracks: filled circle; unknown: hollow square at 50%
+    # Known-energy songs: filled circle. Cortinas + unknown-energy songs: hollow square at 50%.
     dots_known = base.mark_circle(size=55, opacity=0.9).transform_filter(
-        alt.datum.has_energy == True
+        "datum.type == 'song' && datum.has_energy == true"
     ).encode(
         color=alt.condition(
             alt.datum.segment == "played",
@@ -266,7 +313,7 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
     )
     dots_unknown = base.mark_point(size=50, shape="square", filled=False,
                                    opacity=0.5, strokeWidth=1.5).transform_filter(
-        alt.datum.has_energy == False
+        "datum.has_energy == false"
     ).encode(
         color=alt.value("#BBBBBB")
     )
@@ -1387,7 +1434,19 @@ def _section_music():
                     df["singer"].astype(str).str.contains(query, case=False, na=False)
                 )
                 results = df[mask].head(6)
-                if results.empty:
+                # Also search cortinas (filename match against the CORTINAS_DIR folder).
+                # Cortinas have no orchestra/singer/year/energy in metadata — just the filename.
+                cortinas_path = _Path(CORTINAS_DIR)
+                cortina_matches = []
+                if cortinas_path.exists():
+                    q_lower = query.lower()
+                    for f in sorted(list(cortinas_path.glob("*.mp3")) + list(cortinas_path.glob("*.wav"))):
+                        if q_lower in f.stem.lower() or q_lower in "cortina":
+                            cortina_matches.append(f)
+                            if len(cortina_matches) >= 6:
+                                break
+
+                if results.empty and not cortina_matches:
                     st.caption("No results found.")
                 else:
                     next_tid = max((p.get("tanda_id", 0) for p in pq.items if p["type"] == "song"), default=0) + 1
@@ -1419,13 +1478,42 @@ def _section_music():
                                 }
                                 pq.items.append(entry)
                                 _save_pq(pq)
-                                st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "change", "text": f'You added "{row["title"]}" to playlist end.'}
-                                )
+                                _log(f'Added "{row["title"]}" to playlist end.', "change")
                                 st.toast(f'"{row["title"]}" added to playlist.', icon="👤")
                                 st.rerun()
+
+                    # Cortina results — filename-based, "C" badge, no orchestra/singer/year metadata.
+                    for cf in cortina_matches:
+                        c_title = cf.stem
+                        res_col, add_col = st.columns([7, 1])
+                        with res_col:
+                            st.markdown(
+                                f'<div style="padding:3px 0;font-size:12px;'
+                                f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+                                f'<span style="display:inline-block;width:14px;height:14px;background:#EEEEEE;'
+                                f'color:#888;border-radius:3px;font-size:9px;font-weight:700;text-align:center;'
+                                f'line-height:14px;margin-right:5px;vertical-align:middle">C</span>'
+                                f'<strong>{c_title}</strong>'
+                                f'<span style="color:#999"> · cortina</span>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with add_col:
+                            if st.button("＋", key=f"srch_add_cor_{c_title}", use_container_width=True,
+                                         help="Add cortina to end of playlist"):
+                                entry = {
+                                    "type": "cortina",
+                                    "title": c_title,
+                                    "duration": "0:20",
+                                    "source": "user",
+                                }
+                                pq.items.append(entry)
+                                _save_pq(pq)
+                                _log(f'Added cortina "{c_title}" to playlist end.', "change")
+                                st.toast(f'Cortina "{c_title}" added to playlist.', icon="👤")
+                                st.rerun()
             else:
-                st.caption("Search to find and add songs.")
+                st.caption("Search to find and add songs or cortinas.")
 
 # ── Bottom: Library, Queue, Upload ──────────────────────────────────────────
 

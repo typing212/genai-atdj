@@ -205,18 +205,6 @@ uv run pytest tests/test_adjustment_graph.py -v -m integration
 | `test_no_songs_after_last_track` | Returns empty list when current is the last track |
 | `test_rest_from_beginning` | scope=rest from index 0 returns all non-cortina tracks |
 
-### compute_intent_overrides() — stored intent applied to new sessions
-
-| Test | What it checks |
-|---|---|
-| `test_loudness_up_small_uses_default_reference` | Small up delta applied from DEFAULT_PARAMS baseline |
-| `test_loudness_down_medium` | Medium down delta produces correct target value |
-| `test_bass_up_large` | Large up delta on eq_low_gain produces correct target value |
-| `test_reset_returns_empty_overrides` | Reset direction returns `{}` for every track |
-| `test_unknown_feature_returns_empty` | Unrecognised feature name returns `{}` for every track |
-| `test_track_count_respected` | Output list length always matches requested track count |
-| `test_zero_tracks` | Zero track count returns an empty list |
-
 ### Integration tests (LLM — `@pytest.mark.integration`)
 
 | Test | What it checks |
@@ -229,6 +217,45 @@ uv run pytest tests/test_adjustment_graph.py -v -m integration
 | `test_use_original` | "use original for the next tanda" → direction=reset |
 | `test_named_target_orchestra` | "more presence in the Di Sarli tanda" → scope=specific, target_name contains "sarli" |
 | `test_ambiguous_triggers_clarification` | "it sounds a bit off" → needs_clarification=True |
+| `test_unsupported_feature_clarifies_gracefully` | "make it more sparkly" → either redirected to `presence` (closest legal feature) or null + clarification — never crashes, never silently coerces |
+| `test_clarification_options_no_internal_codes` | LLM-generated menu options must not leak internal tags like `(up)`, `(down)`, `(rest)` |
+
+### End-to-end execution (no LLM — state built post-parse, real audio I/O)
+
+These tests bypass `parse_request` (no LLM call) by building the parsed state directly,
+then run the deterministic downstream graph nodes against synthetic WAV input. They
+replace the previously human-only UI_TEST_GUIDE rows 9.2.3 and 9.2.5.
+
+| Test | What it checks |
+|---|---|
+| `test_processed_file_mtime_updates_after_adjustment` | (Replaces UI 9.2.3) Running an audio adjustment overwrites the existing `_enhanced.wav` in `output_dir` with a newer mtime — proves the pipeline actually re-ran |
+| `test_presence_down_lowers_eq_vocal_gain_and_changes_output` | (Replaces UI 9.2.5) `feature=presence + direction=down + magnitude=large` lowers `eq_vocal_gain` to ≤ -0.5 AND produces output WAV bytes that differ from a baseline `direction=reset` run — measurable proxy for "audibly less harsh" |
+
+---
+
+## test_audio_resolution.py — Catalog Filename Resolution Sweep
+
+Verifies that every row in the feature catalog (`data/essentia_newsamp.csv`) can be
+resolved to an audio file on disk via `PlaybackQueue.resolve_file_path`. Catches
+filename-encoding regressions (e.g. cp437-corrupted accented characters) and any
+catalog row whose `filename` column points at a missing file.
+
+Pure-IO test — no LLM, no Streamlit, no audio decoding. Reads `data/essentia_newsamp.csv`,
+the `data/processed/` directory, the `data/raw/` directory, and `data/cortinas/`.
+
+Run only this file:
+```
+uv run pytest tests/test_audio_resolution.py -v
+```
+
+| Test | What it checks |
+|---|---|
+| `test_song_resolves_to_existing_file[<title> \| <orchestra>]` | Parametrized over all 294 catalog rows. Each `(title, orchestra)` pair must resolve to a file that actually exists on disk |
+| `test_resolution_summary` | Aggregate variant — fails once with a list of every unresolved or missing-on-disk row, so a single report shows the full damage at a glance |
+| `test_cortina_resolves_when_directory_present` | Spot-checks cortina resolution: with a known cortina filename, `_resolve_cortina` must return an existing file |
+
+Replaces UI_TEST_GUIDE step 7.10 (special-character resolution) — coverage of unicode
+filename edge cases is exhaustive here, whereas a UI walkthrough could only sample a few.
 
 ---
 

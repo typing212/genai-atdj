@@ -28,6 +28,33 @@ Fix:
 - Added `PlaybackQueue.clear()` to `atdj/playback/player.py` — wipes items, resets `_current_index` to 0, sets `_is_playing` to False, all in one place.
 - Switched `atdj/ui/page_main.py:1199` from `pq.items.clear()` to `pq.clear()`.
 
+### Audio adjustment graph: full menu-pick redesign + slider-value live propagation
+The audio adjustment graph (`atdj/audio/adjustment_graph.py`) had three related bugs that surfaced in Tests 9.5.x / 9.6.x:
+
+1. **Numeric replies (`1`, `2`, `3`) weren't resolved to their menu options.** The graph would emit `1. Increase loudness / 2. Boost bass / ...` then ask "could you clarify?" when the user typed `1`.
+2. **The original intent was dropped through the rejection flow.** "this song is too loud" → graph asks rejection menu → user picks "apply to all" → graph asks "what adjustment?" instead of carrying the `feature=loudness, direction=down` from the prior turn.
+3. **`cancel` wasn't recognized as the third option.** Graph asked "what would you like to cancel?" instead of cleanly cancelling.
+
+Root cause: every chat message was funnelled through `parse_request` (LLM call), which only saw the new message text, with no awareness of options the graph itself just emitted.
+
+Fix: a new entry node, `resolve_pending_menu`, runs first.
+- Heuristically maps the user's reply to one of the previously-emitted options (numeric `1/2/3`, word `first/second/third`, keyword `cancel/rest/next tanda`, or substring of option text). No LLM call.
+- For a **rejection** menu: directly sets `scope` (e.g. `rest` / `next_tanda`) and **carries forward** the prior `feature/direction/magnitude`, then routes straight to `resolve_targets` (skipping `parse_request`). Or for `Cancel`: routes to a new `emit_cancel` terminal node with reply `Okay — no adjustment applied.`
+- For a **clarification** menu: rewrites `user_message` to the picked option's text and routes to `parse_request`, so the LLM sees real text instead of `1`.
+- If the reply matches no option (off-topic during a menu): clears the stale menu state and lets `parse_request` re-interpret as a fresh request — the existing graceful "outside my scope" handling kicks in.
+
+Also: `parse_request` now falls back to prior state for any field the LLM returns null for. Previously, a partial follow-up like "Too loud" (gives feature/direction but no scope) wiped any pre-existing scope. Now it preserves what's known.
+
+### Slider value didn't reach the audio iframe (Test 7.6 / 7.7)
+The Transition (s) and Cortina (s) sliders live in a `@st.fragment` so changing them doesn't re-render the audio iframe (preserves playback). But the audio iframe's JS BAKED `gapMs` / `maxDur` as constants at render time, so it never saw the new slider values. Fix:
+- `atdj/ui/audio_player.py`: replace baked constants with `currentGapMs()` / `currentMaxDur()` helpers that read `window.top.__atdjGapMs` / `__atdjCortinaSec` dynamically (with the baked values as fallback).
+- `atdj/ui/page_main.py` slider fragment: write the latest values to `window.top` via a tiny invisible `st_components.html` component on every fragment render. Includes a per-call timestamp comment so Streamlit doesn't cache an identical previous render.
+
+### Clarification continuation no longer mis-routed to PLAN
+Discovered while running Test 9.5.3 + 9.6.2. When the audio-adjustment graph emits a clarification (e.g. "this song is too loud" → `Apply to all songs after this / Cancel`) it stores the open dialog in `st.session_state["pending_adjustment"]`. But every chat message still went through the top-level classifier in `atdj/ui/page_main.py`, so a short reply like `cancel` or `2` got classified as `PLAN` and the planner ran instead of the clarification continuing.
+
+Fix: at the top of the chat handler, before calling the classifier, check `st.session_state.get("pending_adjustment")` — if set, force `is_audio_adjust = True` and skip the classifier entirely. The audio adjustment graph then receives the user's reply with the pending state intact and resumes the dialog properly.
+
 ### Cortina selection flows from agent → UI
 The `cortina_selector` node previously logged its choice but didn't propagate it to the UI, so the playlist always rendered each agent-inserted cortina row with a generic `"Cortina"` title — and the `PlaybackQueue` resolver fell back to the first file alphabetically, so the displayed name and the played file silently disagreed. New flow:
 
@@ -52,6 +79,29 @@ The on-screen Session Log was hard to read: each PLAN tanda emitted 3–5 lines 
 - **`atdj/ui/page_main.py`**: filters all `activity_log` hoists to `summary=True`, prefixes PLAN entries with `📋 PLAN — `, audio entries with `🎛 AUDIO — `; the `_log()` user-action helper auto-prefixes with `👤 You — `; the auto-enhance success/failure entries inside the PLAN handler are now prefixed `📋 PLAN — Auto-enhanced …` / `📋 PLAN — Enhancement skipped: …`.
 - **Test 5.9 cleanup**: dropped the `_log` call in the new ▶ jump-to-track handlers (cortina + song rows) — jumping is pure navigation, not a state change worth logging.
 - **Documentation**: tests in `tests/UI_TEST_GUIDE.md` referencing the old log strings (Test 2.5, Test 3.2–3.5, Test 5.x, Test 9.2.4) are updated to the new format.
+
+### Removed Quality Enhance toggle + auto-enhance-on-PLAN hook (2026-05-01)
+The sidebar/playback-controls **Quality Enhance** toggle and the PLAN handler's auto-enhance block are gone. Audio enhancement now ONLY fires from the chat path (`atdj/audio/adjustment_graph.py`). What changed:
+
+- `atdj/ui/page_main.py`: removed the `st.toggle("Quality Enhance", key="auto_enhance")` widget and its `_on_qe_toggle` handler; collapsed the audio-settings 3-column layout to 2; deleted the auto-enhance block that called `enhance_tanda` after PLAN; removed the `stored_adjustment_intent` writer.
+- `atdj/audio/adjustment_graph.py`: removed `auto_enhance_on`, `store_intent`, `intent_to_store` from `AdjustmentState`; deleted `compute_intent_overrides()` (only used by the now-removed PLAN hook); simplified `execute_enhancement` so `direction=reset` always deletes the processed file (since nothing else maintains one) and we never set `store_intent`.
+- `tests/test_audio_enhancement/test_adjustment_graph.py`: dropped `TestComputeIntentOverrides` (7 tests, all about the removed function); removed `auto_enhance_on/store_intent/intent_to_store` from the post-parse helpers; one end-to-end test now generates its baseline by calling `enhance_tanda` directly instead of relying on the old `direction=reset` "no-overrides" code path.
+- `tests/UI_TEST_GUIDE.md`: rows 1.7 and 5.5 (Quality Enhance toggle), all of Test 8 (auto-enhance hook), and section 9.7 (persistence) marked as removed.
+
+### Audio adjustment — four fixes from manual testing (2026-05-01)
+
+1. **`next_tanda` returned 12 tracks across multiple plans.** `page_main.py` was writing `tanda_id = tanda_idx` (the per-plan enumerate index), so every fresh PLAN restarted at id 0. With 5 plans queued the playlist had multiple songs sharing each id, and `resolve_targets("next_tanda")` matched all of them. Fix: compute `_tanda_id_offset = max(existing tanda_ids) + 1` once per PLAN and write `tanda_id = _tanda_id_offset + tanda_idx`. The user-search-add path at line 1557 was already doing this correctly — the agent path now matches.
+2. **Clarification options leaked internal codes** like `"Reduce noise (down)"` into the on-screen menu. `PARSE_PROMPT` (`atdj/audio/adjustment_graph.py`) gained explicit rules: write user-facing labels in plain English; never include parenthesized direction/scope/feature tags; examples of good vs bad. New integration test `test_clarification_options_no_internal_codes` enforces it.
+3. **State not preserved across clarification turns.** After a user picked a menu option (e.g. `"Reduce noise"`), `parse_request` saw only that short text, the LLM returned `needs_clarification=true` for whatever slot was still missing, and the prior turn's already-resolved feature/direction got re-asked forever. The earlier "fall back to prior state for null fields" fix wasn't enough on its own. New rule: after merging the LLM's parse with prior state, if `feature + direction + scope` are all filled (or `direction=reset + scope`), force `needs_clarification=False` regardless of what the LLM said.
+4. **Unsupported-feature requests** like `"make it more sparkly"` or `"add reverb"` weren't covered. `PARSE_PROMPT` now tells the LLM: if the request is not one of the six supported features, set `feature=null`, set `needs_clarification=true`, briefly explain what IS supported, and offer the closest legal options. New integration test `test_unsupported_feature_clarifies_gracefully` covers it.
+
+### Catalog filename resolution — automated sweep test (`tests/test_audio_resolution.py`)
+The cp437-corrupted-filename rename (24 files renamed via `s.encode("cp437").decode("utf-8")` round-trip + NFC) was previously verified by hand for a handful of titles in UI test 7.10. That step is now an automated pytest sweep:
+
+- `tests/test_audio_resolution.py` parametrizes `PlaybackQueue.resolve_file_path` over every row of `data/essentia_newsamp.csv` (294 rows) and asserts the resolved path exists on disk. A second `test_resolution_summary` aggregates failures into one report. A third `test_cortina_resolves_when_directory_present` smoke-checks the cortina branch.
+- Run: `uv run pytest tests/test_audio_resolution.py -v` — currently 296 passed.
+- `tests/UI_TEST_GUIDE.md` step 7.10 is now a stub that points at the automated test.
+- `tests/README.md` documents the new test under its own section.
 
 ### Q&A path import fix — `atdj/rag/store.py` (Nancy)
 Discovered while running Test 4 (Q&A path) end-to-end for the first time. Importing `atdj.rag.query` failed at module load with `TypeError: unsupported operand type(s) for |: 'function' and 'NoneType'`, traced to:

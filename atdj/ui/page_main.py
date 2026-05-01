@@ -66,11 +66,41 @@ CHAT_STUB = "Got it — I'm still warming up. Connect me to the music pool for r
 # ── Playback helpers ─────────────────────────────────────────────────────────
 # These are new helpers specific to this UI page — no equivalent exists elsewhere.
 
+def _renumber_tanda_ids(items: list[dict]) -> bool:
+    """Re-assign tanda_id by cortina boundary. Heals stale state from before the
+    2026-05-01 fix (where every PLAN restarted at tanda_id=0, so multiple stacked
+    plans collided and `next_tanda` audio adjustments lumped 12+ tracks together).
+
+    Treats every contiguous run of songs separated by cortinas as one tanda.
+    Mutates items in place. Returns True iff any tanda_id was changed.
+    """
+    changed = False
+    next_id = 0
+    saw_song_in_current_tanda = False
+    for it in items:
+        if it.get("type") == "cortina":
+            if saw_song_in_current_tanda:
+                next_id += 1
+                saw_song_in_current_tanda = False
+            continue
+        if it.get("type") == "song":
+            if it.get("tanda_id") != next_id:
+                it["tanda_id"] = next_id
+                changed = True
+            saw_song_in_current_tanda = True
+    return changed
+
+
 def _get_pq() -> PlaybackQueue:
     if "pq_data" not in st.session_state:
         pq = PlaybackQueue(list(PLAYLIST_STUB))
         st.session_state["pq_data"] = pq.to_session_state()
-    return PlaybackQueue.from_session_state(st.session_state["pq_data"])
+    pq = PlaybackQueue.from_session_state(st.session_state["pq_data"])
+    # 2026-05-01: auto-heal colliding tanda_ids on every load. Cheap (one walk).
+    # Persists the migration if anything changed so subsequent loads are no-ops.
+    if _renumber_tanda_ids(pq.items):
+        st.session_state["pq_data"] = pq.to_session_state()
+    return pq
 
 
 def _save_pq(pq: PlaybackQueue) -> None:
@@ -494,20 +524,48 @@ def _section_chat():
         from langchain_core.messages import HumanMessage
         from atdj.config import get_ui_llm
 
-        try:
-            _llm = get_ui_llm()
-            _classify = _llm.invoke([HumanMessage(content=f"""Classify into exactly one category:
+        # 2026-05-01: when an audio-adjustment clarification or rejection is
+        # open (pending_adjustment is set), the next chat message is OFTEN the
+        # user's response to that question — short replies like "cancel" / "1"
+        # / "2" / "Too loud" — and bypassing the classifier routes them to the
+        # audio graph correctly. But if the user has clearly moved on to a new
+        # intent ("plan a Demare tanda", "who is Pugliese", "search ..."), the
+        # bypass would trap them in an audio-loop. So bypass only when the
+        # message looks like a menu pick; otherwise clear the stale pending
+        # state and let the classifier route fresh.
+        def _looks_like_menu_pick(msg: str) -> bool:
+            m = (msg or "").strip().lower()
+            if not m or len(m) > 60:
+                return False
+            new_intent_signals = (
+                "plan ", "play ", "search ", "find ", "add ", "remove ",
+                "clear ", "skip ", "what is", "who is", "tell me", "show me",
+                "how ", "why ", "when ",
+            )
+            if any(s in m for s in new_intent_signals):
+                return False
+            return True
+
+        if st.session_state.get("pending_adjustment") and _looks_like_menu_pick(msg_text):
+            is_planning, is_audio_adjust = False, True
+        else:
+            # If pending was set but user clearly moved on, drop the stale
+            # clarification so the audio graph doesn't re-prompt next turn.
+            st.session_state.pop("pending_adjustment", None)
+            try:
+                _llm = get_ui_llm()
+                _classify = _llm.invoke([HumanMessage(content=f"""Classify into exactly one category:
 PLAN: plan/find/suggest/change music tracks or playlist
 ADJUST_AUDIO: audio quality changes (too quiet, too loud, too harsh, more bass, noisy, back to default, use original, reset audio, undo changes)
 QUESTION: tango knowledge (history, orchestras, styles)
 Message: "{msg_text.strip()}"
 Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
-            label = _classify.content.strip().upper()
-            is_planning = "PLAN" in label
-            is_audio_adjust = "ADJUST_AUDIO" in label
-        except Exception as _ce:
-            _reply_slot.markdown(f"_(Classifier error: {_ce}. Treating as Q&A.)_")
-            is_planning, is_audio_adjust = False, False
+                label = _classify.content.strip().upper()
+                is_planning = "PLAN" in label
+                is_audio_adjust = "ADJUST_AUDIO" in label
+            except Exception as _ce:
+                _reply_slot.markdown(f"_(Classifier error: {_ce}. Treating as Q&A.)_")
+                is_planning, is_audio_adjust = False, False
 
         if is_planning:
             _reply_slot.markdown("_Planning your session..._")
@@ -593,6 +651,16 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                 # can use it. Was previously only loaded after the loop, which broke
                 # the new resolver call with UnboundLocalError.
                 pq = _get_pq()
+                # 2026-05-01: offset tanda_id by the max already in the playlist so
+                # each PLAN run gets globally unique ids. Without this, every plan
+                # restarts at 0 and `next_tanda` audio adjustments collapse all songs
+                # with the same per-plan index across every plan into one giant target
+                # set (e.g. 5 plans × 2-3 tracks each = 12+ tracks for one "next tanda").
+                _existing_max_tid = max(
+                    (p.get("tanda_id", -1) for p in pq.items if p.get("type") == "song"),
+                    default=-1,
+                )
+                _tanda_id_offset = _existing_max_tid + 1
                 for tanda_idx, tanda_tracks in enumerate(picked_per_tanda):
                     if not tanda_tracks:
                         continue
@@ -612,7 +680,7 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                                     str(int(track.get("duration_seconds", 0) % 60)).zfill(2),
                             "energy": track.get("energy"),
                             "source": "agent",
-                            "tanda_id": tanda_idx,
+                            "tanda_id": _tanda_id_offset + tanda_idx,
                         })
                     if tanda_idx < len(picked_per_tanda) - 1:
                         # 2026-05-01: read the agent's actual cortina selection from
@@ -645,32 +713,9 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     pq.items.extend(new_playlist)
                     _save_pq(pq)
 
-                    if st.session_state.get("auto_enhance", False):
-                        from atdj.audio.enhancement import enhance_tanda
-                        from atdj.audio.adjustment_graph import compute_intent_overrides
-                        from atdj.config import PROCESSED_DIR
-                        from pathlib import Path
-                        track_paths = []
-                        for item in new_playlist:
-                            if item["type"] == "song":
-                                raw_path = pq.resolve_raw_path(item)
-                                if raw_path:
-                                    track_paths.append(Path(raw_path))
-                        if track_paths:
-                            try:
-                                stored_intent = st.session_state.get("stored_adjustment_intent")
-                                overrides = (
-                                    compute_intent_overrides(stored_intent, len(track_paths))
-                                    if stored_intent else None
-                                )
-                                enhance_tanda(track_paths, Path(PROCESSED_DIR), param_overrides=overrides)
-                                st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "info", "text": f"📋 PLAN — Auto-enhanced {len(track_paths)} tracks", "timestamp": ""}
-                                )
-                            except Exception as e:
-                                st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "warning", "text": f"📋 PLAN — Enhancement skipped: {e}", "timestamp": ""}
-                                )
+                    # 2026-05-01: removed the auto-enhance-on-PLAN hook + Quality
+                    # Enhance toggle. Audio enhancement now ONLY fires from the chat
+                    # path (atdj/audio/adjustment_graph.py).
 
                 songs = [t for t in new_playlist if t["type"] == "song"]
                 if songs:
@@ -713,7 +758,6 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     "user_message": msg_text.strip(),
                     "playlist": pq.items,
                     "current_index": pq.current_index,
-                    "auto_enhance_on": st.session_state.get("auto_enhance", False),
                     "output_dir": str(PROCESSED_DIR),
                     "resolved_paths": resolved_paths,
                     "scope": None, "feature": None, "direction": None,
@@ -727,8 +771,6 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     "reference_params": None,
                     "computed_overrides": [],
                     "execution_results": [],
-                    "store_intent": False,
-                    "intent_to_store": None,
                     "reply": "",
                     "activity_log": [],
                 }
@@ -742,9 +784,6 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     k: v for k, v in final.items()
                     if k not in ("reply", "execution_results", "activity_log")
                 }
-
-            if final.get("store_intent") and st.session_state.get("auto_enhance"):
-                st.session_state["stored_adjustment_intent"] = final["intent_to_store"]
 
             for entry in final.get("activity_log", []):
                 # Only surface entries flagged as user-visible summaries; the JSON
@@ -1139,9 +1178,15 @@ def _section_music():
                 max_dur = cortina_sec if is_cortina else None
                 effective_gap = 0 if is_cortina else gap_sec
                 if file_path:
+                    # 2026-05-01 (Test 7.9): autoplay only after the user has
+                    # explicitly initiated playback (clicked a ▶ jump button or
+                    # ⏭/⏮). Until then the iframe renders with controls but no
+                    # autoplay, so a fresh PLAN doesn't blast music.
+                    _autoplay_ok = bool(st.session_state.get("playback_initiated", False))
                     render_audio_player(
                         file_path, gap_seconds=effective_gap,
                         max_duration=max_dur, fade_in_seconds=2.0,
+                        autoplay=_autoplay_ok,
                     )
                 else:
                     _autoskip_html = f"""
@@ -1179,11 +1224,13 @@ def _section_music():
                     if st.button("⏮", use_container_width=True, help="Previous track", key="pb_prev"):
                         pq.previous_track()
                         _save_pq(pq)
+                        st.session_state["playback_initiated"] = True
                         st.rerun()
                 with btn2:
                     if st.button("⏭", use_container_width=True, help="Skip to next", key="pb_skip"):
                         pq.next_track()
                         _save_pq(pq)
+                        st.session_state["playback_initiated"] = True
                         st.rerun()
                 with gap_bar_col:
                     _gap_bar_html = f"""
@@ -1238,11 +1285,6 @@ def _section_music():
                 # render globally and appear right after the fragment rerun. The
                 # Session Log entry is still recorded via _log() and shows on the
                 # next full rerun.
-                def _on_qe_toggle():
-                    new = "ON" if st.session_state.get("auto_enhance") else "OFF"
-                    _log(f'Quality Enhance turned {new}.', "change")
-                    st.toast(f'Quality Enhance {new}', icon='👤')
-
                 def _on_gap_change():
                     v = st.session_state.get("song_gap")
                     _log(f'Transition gap set to {v}s (applies to next track).', "change")
@@ -1255,15 +1297,7 @@ def _section_music():
 
                 @st.fragment
                 def _audio_settings_fragment():
-                    enh_c, gap_c, cort_c = st.columns(3)
-                    with enh_c:
-                        st.markdown(
-                            '<p style="font-size:13px;font-weight:400;color:#31333F;margin:0 0 14px">Quality Enhance</p>',
-                            unsafe_allow_html=True,
-                        )
-                        st.toggle("Quality Enhance", value=False, key="auto_enhance",
-                                  label_visibility="collapsed",
-                                  on_change=_on_qe_toggle)
+                    gap_c, cort_c = st.columns(2)
                     with gap_c:
                         st.number_input(
                             "Transition (s)", min_value=0, max_value=60, value=10, key="song_gap",
@@ -1276,6 +1310,28 @@ def _section_music():
                             label_visibility="visible",
                             on_change=_on_cortina_change,
                         )
+                    # 2026-05-01: write the live slider values to the top window
+                    # so the audio iframe's currentGapMs() / currentMaxDur()
+                    # readers see the latest value at advance / timeupdate time.
+                    # Without this, the audio iframe (which is NOT re-rendered
+                    # by fragment-scoped reruns) would keep using its baked
+                    # initial values forever. The varying timestamp comment
+                    # forces components.html to re-render the iframe instead of
+                    # caching the previous identical-content one.
+                    import time as _time_mod
+                    _gap_ms = int(st.session_state.get("song_gap", 10)) * 1000
+                    _cor_s  = int(st.session_state.get("cortina_len", 30))
+                    _stamp = int(_time_mod.time() * 1000)
+                    st_components.html(
+                        f"""<!-- atdj-slider-write {_stamp} -->
+                        <script>
+                          try {{ window.top.__atdjGapMs = {_gap_ms}; }} catch (e) {{}}
+                          try {{ window.top.__atdjCortinaSec = {_cor_s}; }} catch (e) {{}}
+                          try {{ window.parent.__atdjGapMs = {_gap_ms}; }} catch (e) {{}}
+                          try {{ window.parent.__atdjCortinaSec = {_cor_s}; }} catch (e) {{}}
+                        </script>""",
+                        height=1,
+                    )
 
                 _audio_settings_fragment()
 
@@ -1296,6 +1352,10 @@ def _section_music():
                 _log(f'Cleared playlist ({len(pq.items)} tracks).', "change")
                 pq.clear()
                 _save_pq(pq)
+                # 2026-05-01 (Test 7.9): clearing is the "explicit stop" — reset
+                # the autoplay-armed flag so the next plan won't blast music until
+                # the user manually clicks ▶ again.
+                st.session_state["playback_initiated"] = False
                 st.rerun()
         playlist = pq.items
         cortina_len = st.session_state.get("cortina_len", 30)
@@ -1328,6 +1388,8 @@ def _section_music():
                                 pq.jump_to(i)
                                 _save_pq(pq)
                                 # 2026-05-01: no log entry — pure navigation, not a state change worth recording.
+                                # 2026-05-01 (Test 7.9): user explicitly initiated playback → enable autoplay.
+                                st.session_state["playback_initiated"] = True
                                 st.rerun()
                     with cb1:
                         if i > 0:
@@ -1400,6 +1462,8 @@ def _section_music():
                             pq.jump_to(i)
                             _save_pq(pq)
                             # 2026-05-01: no log entry — pure navigation, not a state change worth recording.
+                            # 2026-05-01 (Test 7.9): user explicitly initiated playback → enable autoplay.
+                            st.session_state["playback_initiated"] = True
                             st.rerun()
                     with b1:
                         if prev_s >= 0 and prev_s != pq.current_index:

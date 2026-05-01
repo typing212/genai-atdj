@@ -1,6 +1,7 @@
 """Tests for PlaybackQueue."""
 
 from atdj.playback.player import PlaybackQueue
+from atdj.ui.page_main import _renumber_tanda_ids
 
 ITEMS = [
     {"type": "song", "title": "Track A", "orchestra": "Orch A", "style": "TANGO", "duration": "3:00"},
@@ -127,3 +128,60 @@ def test_remove_at_cursor():
     pq.remove(1)
     assert pq.current_index == 1
     assert pq.current_track()["title"] == "Track B"
+
+
+# ── _renumber_tanda_ids — auto-heal stale tanda_id collisions ─────────────────
+
+class TestRenumberTandaIds:
+    """Locks in the 2026-05-01 fix for the 'next_tanda matched 12 tracks' bug.
+    Stacked plans used to all start at tanda_id=0; this migration walks the
+    playlist and assigns one id per cortina-bounded block."""
+
+    def test_collision_across_stacked_plans_is_healed(self):
+        # Three plans stacked, every one used tanda_id=0 (the pre-fix bug).
+        items = [
+            {"type": "song", "title": "P1-A", "tanda_id": 0},
+            {"type": "song", "title": "P1-B", "tanda_id": 0},
+            {"type": "cortina", "title": "C1"},
+            {"type": "song", "title": "P2-A", "tanda_id": 0},
+            {"type": "song", "title": "P2-B", "tanda_id": 0},
+            {"type": "cortina", "title": "C2"},
+            {"type": "song", "title": "P3-A", "tanda_id": 0},
+        ]
+        changed = _renumber_tanda_ids(items)
+        assert changed is True
+        assert [it.get("tanda_id") for it in items if it.get("type") == "song"] == [0, 0, 1, 1, 2]
+
+    def test_already_correct_is_noop(self):
+        items = [
+            {"type": "song", "title": "A", "tanda_id": 0},
+            {"type": "cortina", "title": "C1"},
+            {"type": "song", "title": "B", "tanda_id": 1},
+        ]
+        changed = _renumber_tanda_ids(items)
+        assert changed is False
+
+    def test_cortinas_dont_get_tanda_id(self):
+        items = [
+            {"type": "song", "title": "A", "tanda_id": 0},
+            {"type": "cortina", "title": "C1"},  # no tanda_id field — should stay that way
+            {"type": "song", "title": "B", "tanda_id": 0},
+        ]
+        _renumber_tanda_ids(items)
+        assert "tanda_id" not in items[1]
+
+    def test_consecutive_cortinas_dont_advance(self):
+        # Two cortinas back-to-back shouldn't bump the id twice.
+        items = [
+            {"type": "song", "title": "A", "tanda_id": 0},
+            {"type": "cortina", "title": "C1"},
+            {"type": "cortina", "title": "C2"},
+            {"type": "song", "title": "B", "tanda_id": 9},
+        ]
+        _renumber_tanda_ids(items)
+        assert [it.get("tanda_id") for it in items if it.get("type") == "song"] == [0, 1]
+
+    def test_empty_playlist(self):
+        items = []
+        assert _renumber_tanda_ids(items) is False
+        assert items == []

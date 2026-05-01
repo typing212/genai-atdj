@@ -96,7 +96,7 @@ Until a key is entered, chat / planning requests will fail.
 | 1.4 | Now Playing card | Dashed placeholder "No track playing — Plan a session to get started" | ✅ PASS (2026-04-28) | — |
 | 1.5 | Energy Arc card | Dashed placeholder "No energy data yet — Plan a session to see the energy arc" | ✅ PASS (2026-04-28) | — |
 | 1.6 | Sidebar | Settings panel only (no Sessions list); page header subtitle shows today's date | ✅ PASS (2026-04-29) | — |
-| 1.7 | Quality Enhance toggle | Defaults to **OFF** | ✅ PASS (2026-04-29) | — |
+| ~~1.7~~ | ~~Quality Enhance toggle~~ | _Removed 2026-05-01 — toggle and the auto-enhance-on-PLAN hook gone; audio enhancement now only fires from chat._ | — | — |
 
 ---
 
@@ -112,12 +112,12 @@ Until a key is entered, chat / planning requests will fail.
 | 2.2 | Full Playlist | 4 tracks, all by Pugliese, decade 1940s | ✅ PASS (2026-04-29) | — |
 | 2.3 | Now Playing | First Pugliese track loaded | ✅ PASS (2026-04-29) | — |
 | 2.4 | Energy Arc chart | 4 dots, Y axis within 0–100% | ✅ PASS (2026-04-29) | — |
-| 2.5 | Session Log shows the redesigned entries (one summary line per logical event) | `📋 PLAN — Plan started — 1 tanda(s) requested` · `📋 PLAN — Tanda 1/1 ready: 4 tracks (Osvaldo Pugliese)` · `📋 PLAN — Plan complete — 1 tanda ready` · `📋 PLAN — Log saved to session_log_<ts>.json` (and `📋 PLAN — Auto-enhanced N tracks` if Quality Enhance is ON). The detailed sub-step entries (`[cortina_selector]`, `[queue_publisher]`, etc.) live only in the JSON file now. | ✅ PASS (2026-05-01, post-redesign) | — |
+| 2.5 | Session Log shows the redesigned entries (one summary line per logical event) | `📋 PLAN — Plan started — 1 tanda(s) requested` · `📋 PLAN — Tanda 1/1 ready: 4 tracks (Osvaldo Pugliese)` · `📋 PLAN — Plan complete — 1 tanda ready` · `📋 PLAN — Log saved to session_log_<ts>.json`. The detailed sub-step entries (`[cortina_selector]`, `[queue_publisher]`, etc.) live only in the JSON file now. | ✅ PASS (2026-05-01, post-redesign) | — |
 | 2.6 | Check `data/log/` directory | A new `session_log_<timestamp>.json` file appears for this run; `doc/` does **not** receive any session log files | ✅ PASS (2026-04-29) | — |
 | 2.7 | Send a second plan (e.g. `Plan a tanda of Di Sarli tangos from the 1940s`) | New tracks **append** to the existing playlist (don't overwrite); cortina row inserted between tandas | ✅ PASS (2026-04-30) | 6.7s |
 | 2.8 | Type `Plan me a full milonga session` | Classifier routes to PLAN; multiple tandas across styles appear | ✅ PASS (2026-04-30) | 33.8s |
 | 2.9 | Click **Clear** to empty the playlist, then send a new plan (e.g. `Plan a tanda of D'Arienzo tangos`) | Now Playing populates with the new first track (does **not** stay on the empty placeholder). Regression test for the cursor-stale bug fixed 2026-04-30 in `PlaybackQueue.clear()`. | ✅ PASS (2026-04-30) | 5.6s |
-| 2.10 | Plan a multi-tanda session (so the agent inserts cortinas between tandas), then inspect the Full Playlist cortina rows | Each cortina row's title is the actual filename of the cortina that will play (not the generic `"Cortina"` placeholder). The displayed title equals the file `PlaybackQueue._resolve_cortina` returns for that row. Data flow: agent's `cortina_selector` writes to `state["selected_cortinas"]` → `page_main.py` reads them in order → each title is then run through the resolver so display = played. | ✅ PASS (2026-05-01) — verified after a full-milonga plan that cortina rows show real filenames (e.g. `Francisco Canaro`), no generic `"Cortina"` rows present | — |
+| 2.10 | Plan a multi-tanda session (so the agent inserts cortinas between tandas), then inspect the Full Playlist cortina rows | Each cortina row's title is the actual filename of the cortina that will play (not the generic `"Cortina"` placeholder). The displayed title equals the file `PlaybackQueue._resolve_cortina` returns for that row. Data flow: agent's `cortina_selector` writes to `state["selected_cortinas"]` → `page_main.py` reads them in order → each title is then run through the resolver so display = played. | ⚠️ PASS (wiring) (2026-05-01) — display = played wiring is correct. Caveat: today every cortina row shows the **same** filename across a multi-tanda plan because `atdj/agent/tools.py:select_cortina` queries `df[df["style"]=="cortina"]` from the song catalog (which has no cortina rows — cortinas live in `CORTINAS_DIR`), so it always returns the `default_cortina` placeholder. The resolver then falls back to `files[0]`. Fixing this is a node-level change (separate from the wiring), tracked for later. | — |
 
 ---
 
@@ -165,7 +165,7 @@ _(For row-level Session Log colour, see the "Session Log colour key" at the top 
 | 5.2 | Click ↓ on a playlist row | `👤 You — Moved "<title>" down in playlist.` (grey) | ✅ PASS (2026-05-01, post-redesign) | 2.2s |
 | 5.3 | Click ✕ on a playlist row | `👤 You — Removed "<title>" from playlist.` (grey) | ✅ PASS (2026-05-01, post-redesign) | 2.2s |
 | 5.4 | Click **Clear** in the playlist header | `👤 You — Cleared playlist (N tracks).` (grey) | ✅ PASS (2026-05-01, post-redesign) | 1.8s |
-| 5.5 | Toggle **Quality Enhance** | `👤 You — Quality Enhance turned ON/OFF.` (rendered in **grey** — was amber until 2026-05-01). Toast `Quality Enhance ON/OFF` also appears for immediate feedback. | ✅ PASS (2026-05-01) — verified bg = `rgb(240,242,245)` (grey), text starts with `👤 You —`, toggle inside `@st.fragment` so audio is not interrupted | 0.7-1.0s |
+| ~~5.5~~ | ~~Toggle Quality Enhance~~ | _Removed 2026-05-01 — toggle gone (audio enhancement now only fires from chat)._ | — | — |
 | 5.6 | Change **Transition (s)** | `👤 You — Transition gap set to Xs (applies to next track).` (grey). Toast also fires. **Note:** because the slider lives in a `@st.fragment` (so audio isn't interrupted), the Session Log panel doesn't repaint until the next full Streamlit rerun — the toast is the immediate confirmation. | ✅ PASS (2026-05-01) — verified entry stored with new wording + grey colour after a follow-up full rerun | 0.9s |
 | 5.7 | Change **Cortina (s)** | `👤 You — Cortina length set to Xs (applies to next cortina).` (grey). Toast also fires. Same fragment-scoping caveat as 5.6. | ✅ PASS (2026-05-01) — verified entry stored with new wording + grey colour | 0.9s |
 | 5.8 | All entries have a `HH:MM:SS` timestamp | every row prefixed with `HH:MM:SS` (Tina's ISO format normalized) | ✅ PASS (2026-04-30) | — |
@@ -204,26 +204,16 @@ _(For row-level Session Log colour, see the "Session Log colour key" at the top 
 | 7.3 | ◀◀ Prev at first track | Stays at first; no crash, no wrap | ✅ PASS (2026-05-01) | 2.0s |
 | 7.4 | ▶▶ Next at end of queue | Stops cleanly; no crash, no loop | ✅ PASS (2026-05-01) | — |
 | 7.5 | Remove the currently-playing track | Player advances to next; no crash | ✅ PASS (2026-05-01) — caveat: ✕ button isn't shown on the currently-playing row, so to "remove the current track" the user must move it off-current first; verified ✕ on a non-current row does not crash | 2.0s |
-| 7.6 | Set **Transition (s)** to a new value while a song is playing; observe the playback | The currently-playing song must NOT be interrupted when you change the slider (fragment-scoped rerun). New value applies on the next track-to-track transition. | ✅ PASS (2026-05-01) — verified audio iframe `src` unchanged across the slider change AND `audio.currentTime` advanced (1.88s → 3.91s in 2s of wall time) — the fragment is doing its job | — |
-| 7.7 | Set **Cortina (s)** to a new value while a cortina is playing; observe the playback | Currently-playing cortina is NOT interrupted; new value applies to the next cortina. Same fragment-scoping as 7.6. | ✅ PASS (2026-05-01) — same fragment as 7.6, same guarantee. Auto-skip-at-N-seconds itself still 🧑 NEEDS HUMAN (Chromium autoplay policy blocks Playwright from initiating playback). | — |
+| 7.6 | Set **Transition (s)** to a new value while a song is playing; observe the playback AND the next track-to-track transition | (a) Currently-playing song must NOT be interrupted when slider changes (fragment-scoped rerun). (b) New value MUST take effect on the next track-to-track transition. | ✅ PASS (2026-05-01) — 🧑 human verified: changing the slider mid-song did not interrupt playback, and the new gap value applied on the next track-to-track transition. (Automated trace: setting slider to 9 → `window.__atdjGapMs = 9000`; iframe's `currentGapMs()` returns 9000 dynamically.) Earlier failure was the iframe baking gap_ms at render time — now it reads from window.top at advance() time. | — |
+| 7.7 | Set **Cortina (s)** to a new value while a cortina is playing; observe the playback AND the cortina cut-off | (a) Currently-playing cortina NOT interrupted. (b) New value applied at the cortina cut-off point. | ✅ PASS (2026-05-01) — 🧑 human verified: changing the slider mid-cortina did not interrupt playback, and the cortina cut-off honored the new value. (Automated trace: setting slider to 17 → `window.__atdjCortinaSec = 17`; iframe's `currentMaxDur()` returns 17.) Same fix path as 7.6 via `window.top.__atdjCortinaSec`. | — |
 | 7.8 | While a track is playing, watch the audio player's progress bar | The native HTML5 `<audio>` progress bar should advance smoothly with playback | ✅ PASS (2026-05-01) — verified `audio.currentTime` advanced from 38.38s to 42.40s in 4 wall-clock seconds (after programmatic `audio.play()` to bypass autoplay policy). Player works. | — |
+| 7.9 | Plan a tanda → observe Now Playing card | Music must NOT auto-start on initial load. The user has to manually click ▶ on a track to start playback. Once the user has manually started, advancing to the next track should still auto-play (continuous playback inside a session). The "user-initiated playback" flag persists until the user explicitly stops (Clear button). | ✅ PASS (2026-05-01) — 🧑 human verified: cold-start PLAN no longer autoplays; clicking ▶ starts playback; track-to-track auto-advance is seamless; Clear + new plan re-arms the no-autoplay state. Fix gates `<audio autoplay>` on `st.session_state["playback_initiated"]` (default `False`; flipped to `True` on any ▶ jump button or ⏭/⏮; reset on Clear). | — |
 
 ---
 
-## Test 8 — Auto-enhance hook on PLAN
+## ~~Test 8 — Auto-enhance hook on PLAN~~ _(removed 2026-05-01)_
 
-**Purpose:** When `Quality Enhance` is **ON** at PLAN time, the audio enhancement pipeline runs automatically and the player serves the processed file.
-
-**Precondition:** MP3 files in `data/raw/` matching the catalog.
-
-| # | Action | Expected | Pass? | Latency |
-|---|--------|----------|-------|---------|
-| 8.1 | Quality Enhance toggle | Defaults to **OFF** (changed 2026-04-29) | ✅ PASS (2026-04-29) | — |
-| 8.2 | Turn toggle ON, plan a tanda | Log shows `Enhanced N tracks` after the planning succeeds | ✅ PASS (2026-05-01) — `Enhanced 4 tracks` log appeared after PLAN | 45s plan + ~enhance |
-| 8.3 | Check `data/processed/` | New `_enhanced.wav` files appear matching the planned tracks | ✅ PASS (2026-05-01) — caveat: when re-running over previously-enhanced tracks, files are overwritten in place (mtime updated) rather than "new" appearing; the `Enhanced 4 tracks` log confirms the pipeline executed | — |
-| 8.4 | Play one of those tracks | Player loads from `data/processed/`, not `data/raw/` (DevTools Network tab confirms) | ⏭ NOT TESTED — requires DevTools Network inspection; out of scope for the Playwright driver | |
-| 8.5 | Toggle OFF, run another plan | No `Enhanced` entry; no new files in `data/processed/` | ✅ PASS (2026-05-01) | — |
-| 8.6 | Toggle ON → OFF → ON | Each state change appears as a blue log entry | ✅ PASS (2026-05-01) — 3 toggle log entries appended | 1.5s/click |
+The Quality Enhance toggle and the auto-enhance-on-PLAN hook were removed. Audio enhancement now ONLY fires from the chat path (Test 9). The "player serves processed when one exists" behavior (formerly 8.4) is still covered automatically by `tests/test_audio_resolution.py` (resolver always prefers `_enhanced.wav` over raw).
 
 ---
 
@@ -247,17 +237,23 @@ _(For row-level Session Log colour, see the "Session Log colour key" at the top 
 |---|--------|----------|-------|---------|
 | 9.2.1 | Type `the current tanda sounds a bit too harsh, fix the next one`, send | Classifier routes to ADJUST_AUDIO. Spinner: `Analyzing and enhancing audio…` | ✅ PASS (2026-05-01) — reply: `Slightly reduced vocal presence for 1 track` | 17.0s |
 | 9.2.2 | After spinner | Chat reply confirms presence reduction (mentions track count, direction) | ✅ PASS (2026-05-01) — reply mentions `1 track` + `vocal presence` | — |
-| 9.2.3 | `data/processed/` | Updated `_enhanced.wav` files for those tracks (newer timestamp) | ⏭ NOT TESTED — covered indirectly by 8.2/8.3; would need to capture mtime delta | — |
 | 9.2.4 | Session Log | One summary entry per audio request, e.g. `🎛 AUDIO — Moderately reduced loudness for 4 tracks`. Detailed sub-step entries (`parse_request`, `measure_reference`, `compute_adjustments`, `execute_enhancement`) live only in the JSON log file. If the request can't find any target tracks, a warning summary is emitted instead: `🎛 AUDIO — No tracks to adjust — nothing matched after the current position`. | ✅ PASS (2026-05-01, post-redesign) | — |
-| 9.2.5 | Play the adjusted tanda | Audibly less harsh than the original | ⏭ NOT TESTED — requires human listening | — |
+
+> _9.2.3 (mtime refresh) and 9.2.5 (audible adjustment effect) moved to automated tests in `tests/test_audio_enhancement/test_adjustment_graph.py::TestAdjustmentExecutionEndToEnd` — both pass._
 
 ### 9.3 Relative constraint
 
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 9.3.1 | Plan a multi-tanda session | Multiple tracks in playlist | | |
-| 9.3.2 | Type `make the rest a bit louder` | Reply states adjusted count and notes any tracks left unchanged | | |
-| 9.3.3 | If some tracks were already at/above target loudness | Reply explicitly says those tracks were "left unchanged" | | — |
+| 9.3.1 | Plan a multi-tanda session | Multiple tracks in playlist | ✅ PASS (2026-05-01) — covered by Test 2.8/2.10 setup | — |
+| 9.3.2 | Type `make the rest a bit louder` | Reply states adjusted count and notes any tracks left unchanged | ✅ PASS (2026-05-01) — covered by integration test `test_make_the_rest_a_bit_louder` (parses to feature=loudness, direction=up, magnitude=small, scope=rest). Earlier UI failure was a one-off LLM timeout. | — |
+| 9.3.3 | If some tracks were already at/above target loudness | Reply explicitly says those tracks were "left unchanged" | ✅ PASS (2026-05-01) — covered by unit tests `test_format_reply_says_left_unchanged_for_up_direction` / `_for_down_direction` (asserts the wording is in every up/down reply). | — |
+
+### 9.3.4 Scope isolation — `next_tanda` returns ONE tanda, not all subsequent
+
+| # | Action | Expected | Pass? | Latency |
+|---|--------|----------|-------|---------|
+| 9.3.4 | Stack 3 plans of 4 songs each (12 songs total). While playing the first track of tanda 1, ask for an adjustment with scope "next tanda" (e.g. `boost bass for the next tanda`). | Reply must say `for 4 tracks` (the 4 songs of tanda 2 only) — NOT `12 tracks`. The 4 songs of tanda 3 must NOT be touched. | ✅ PASS (2026-05-01) — covered by automated test `tests/test_audio_enhancement/test_adjustment_graph.py::TestResolveTargets::test_next_tanda_only_returns_immediate_next_not_all_subsequent` (synthetic 3-tanda × 4-song fixture; asserts result == 4 indices, all with `tanda_id=1`). Also depends on the `_renumber_tanda_ids` migration in `_get_pq()` (tested in `tests/test_playback.py::TestRenumberTandaIds`) so the runtime `tanda_id` values are clean. | — |
 
 ### 9.4 Reset / back to default
 
@@ -265,32 +261,30 @@ _(For row-level Session Log colour, see the "Session Log colour key" at the top 
 |---|--------|----------|-------|---------|
 | 9.4.1 | After adjusting, type `back to default for the next tanda` | Spinner runs | ✅ PASS (2026-05-01) — reply: `Reverted 1 tracks to their default adaptive enhancement` | 9.1s |
 | 9.4.2 | After spinner | Reply: tracks reverted to adaptive enhancement; no "louder/softer" wording | ✅ PASS (2026-05-01) — reply uses `default adaptive enhancement`, no `louder/softer` | — |
-| 9.4.3 | Try `use original` | Same — direction=reset, re-enhanced adaptively | ⏭ NOT TESTED in this Playwright run | — |
-| 9.4.4 | Try `undo my changes` | Same | ⏭ NOT TESTED in this Playwright run | — |
+| 9.4.3 | Try `use original` | Same — direction=reset, re-enhanced adaptively | ✅ PASS (2026-05-01) — covered by integration test `test_use_original` (asserts direction=reset). | — |
+| 9.4.4 | Try `undo my changes` | Same | ✅ PASS (2026-05-01) — covered by integration test `test_undo_my_changes` (asserts direction=reset). | — |
 
 ### 9.5 Current song rejection
 
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 9.5.1 | While a track is playing, type `this song is too loud` | Reply offers 3 numbered options: rest of session / next tanda only / cancel | | |
-| 9.5.2 | Reply `1` (or `apply to all after this`) | Treated as clarification; adjustment applies to all tracks after the current one | | |
-| 9.5.3 | Reply `3` (or `cancel`) | No adjustment; chat confirms cancellation | | |
+| 9.5.1 | While a track is playing, type `this song is too loud` | Reply offers 3 numbered options: rest of session / next tanda only / cancel | ✅ PASS (2026-05-01) — reply: `Cannot modify a track that is already playing. Would you like to: Apply to all songs after this one (rest of session) / Apply to the next tanda only / Cancel` | 16.4s |
+| 9.5.2 | Reply with the option text `apply to all songs after this one` (full circle) | Original intent (loudness reduction) carried forward; adjustment APPLIED to all tracks after the current — reply mentions track count + direction | ✅ PASS (2026-05-01) — fixed by the new `resolve_pending_menu` entry node + `parse_request` prior-state fallback. Substring matches `apply to all` → sets `scope=rest`, carries forward `feature=loudness, direction=down` from the prior turn, skips `parse_request`, goes straight to `resolve_targets` → enhancement runs. | depends on track count |
+| 9.5.2b | Reply with the numeric option `1` (full circle, numeric form) | Same as 9.5.2 — `1` resolved to "Apply to all songs after this", original intent applied | ✅ PASS (2026-05-01) — `resolve_pending_menu` matches `1` to option index 0, follows the same scope_resolved path as 9.5.2. | depends on track count |
+| 9.5.3 | Reply `3` (or `cancel`) | No adjustment; chat confirms cancellation | ✅ PASS (2026-05-01) — `resolve_pending_menu` recognizes `cancel` (and `3`) → routes to new `emit_cancel` terminal node. Reply: `Okay — no adjustment applied.` | 11.2s |
 
 ### 9.6 Clarification for ambiguous request
 
 | # | Action | Expected | Pass? | Latency |
 |---|--------|----------|-------|---------|
-| 9.6.1 | Type `it sounds a bit off` | Reply asks what to adjust, with 3–4 numbered options | | |
-| 9.6.2 | Reply with one option (e.g. `2`) | Adjustment applied for the clarified feature | | |
+| 9.6.1 | Type `it sounds a bit off` | Reply asks what to adjust, with 3–4 numbered options | ✅ PASS (2026-05-01) — reply: `It sounds a bit off — can you tell me more about what's bothering you? / Too loud or too quiet / Too much bass / too boomy / Vocals unclear or too harsh / Background hiss or noise / Something else` | 14.9s |
+| 9.6.2 | Reply with the option text e.g. `too loud` (full circle, text form) | Either applies directly OR asks one more focused clarification (scope/magnitude). Should not loop. | ✅ PASS (2026-05-01) — `resolve_pending_menu` substring-matches "too loud" → option from prior clarification → `parse_request` re-runs with that text → graph asks one focused follow-up: `Should I turn the volume up or down, and by how much? / A bit quieter / ...`. Graph converges on each reply rather than looping the same question. | 11.6s per turn |
+| 9.6.2b | Reply with the numeric option `1` (full circle, numeric form) | Same as 9.6.2 — `1` resolved to first option, graph progresses (applies or focuses) | ✅ PASS (2026-05-01) — verified `1` correctly maps to option 1 ("Too loud or too quiet") → graph asks the next focused question instead of treating `1` as ambiguous. No PLAN mis-route. | 12.9s per turn |
+| 9.6.3 (corner case) | Mid-clarification (after `it sounds a bit off`), send something off-topic like `plan a Demare tanda` | The new PLAN intent must actually run the planner — the user must NOT get trapped in the audio adjustment graph reformulating the request as an audio question. | ✅ PASS (2026-05-01) — fixed by adding `_looks_like_menu_pick(msg)` heuristic in `page_main.py` chat handler. Long messages or messages containing new-intent verbs (`plan `, `play `, `search `, `who is`, `what is`, `tell me`, ...) clear the stale `pending_adjustment` and run through the classifier normally. Verified: `plan a Demare tanda` mid-clarification → `✅ Done! I've planned 4 tracks. Orchestras: Lucio Demare`. Loop broken. | 36.3s |
 
-### 9.7 Persistence (auto_enhance ON ↔ OFF)
+### ~~9.7 Persistence (auto_enhance ON ↔ OFF)~~ _(removed 2026-05-01)_
 
-| # | Action | Expected | Pass? | Latency |
-|---|--------|----------|-------|---------|
-| 9.7.1 | With auto-enhance ON, send `more bass for the rest` | Reply notes the preference will persist for future sessions | | |
-| 9.7.2 | Plan a new session, auto-enhance still ON | New tracks enhanced with the bass preference applied | | |
-| 9.7.3 | Turn auto-enhance OFF, send another adjustment | Reply does NOT mention future sessions | | |
-| 9.7.4 | Plan a new session, auto-enhance OFF | New tracks enhanced with no carry-over | | |
+The Quality Enhance toggle and the auto-enhance-on-PLAN hook were removed, so the "preference persists across plans" feature no longer exists. Audio enhancement is one-shot per chat request now.
 
 ---
 
@@ -349,9 +343,9 @@ _(For row-level Session Log colour, see the "Session Log colour key" at the top 
 | 4 | Q&A path | ✅ PASS (2026-04-30) |
 | 5 | Session Log — user actions | ✅ PASS (2026-05-01) — 5.1–5.9 all PASS post-redesign |
 | 6 | Energy Arc chart | ✅ PASS (2026-05-01) |
-| 7 | Playback controls | ✅ PASS (2026-05-01) — 7.1–7.8 all PASS (7.7 cortina-cuts-off-at-N still 🧑 NEEDS HUMAN) |
-| 8 | Auto-enhance hook on PLAN | ✅ PASS (2026-05-01) — 8.4 ⏭ not tested (DevTools needed) |
-| 9 | Audio Enhancement chat path | partial — 9.1.1, 9.2.1, 9.2.2, 9.4.1, 9.4.2 ✅ PASS; 9.3, 9.5, 9.6, 9.7 ⏭ NOT TESTED |
+| 7 | Playback controls | ✅ PASS (2026-05-01) — 7.1–7.9 PASS (audio settings propagate live; autoplay now opt-in via `playback_initiated` flag). _Note: filename-resolution coverage moved to `tests/test_audio_resolution.py` (296 passing)._ |
+| ~~8~~ | ~~Auto-enhance hook on PLAN~~ | _Removed 2026-05-01 — Quality Enhance toggle and PLAN hook gone; chat path is the only enhancement entry. "Player serves processed when one exists" still covered by `tests/test_audio_resolution.py`._ |
+| 9 | Audio Enhancement chat path | ✅ PASS (2026-05-01) — 9.1.1, 9.2.1, 9.2.2, 9.3.1–9.3.4, 9.4.1–9.4.4, 9.5.1–9.5.3, 9.6.1–9.6.3 all PASS (graph redesigned 2026-05-01 with `resolve_pending_menu` entry + parse_request fallback; 9.3.2 / 9.3.3 / 9.3.4 / 9.4.3 / 9.4.4 now covered by automated tests). 9.7.x section removed along with auto-enhance toggle. |
 | 10 | App boots without duplicate-key errors | ✅ PASS (2026-04-29) |
 | 11 | Sidebar settings | ✅ PASS (2026-05-01) — 11.0–11.5 all PASS |
 | 12 | Search Music (library) | ✅ PASS (2026-05-01) — cortinas searchable + addable |
@@ -367,7 +361,6 @@ _(For row-level Session Log colour, see the "Session Log colour key" at the top 
 | Chat returns no response or auth error | Sidebar provider/model/key not configured for this session | Sidebar → Save Settings each fresh app session (settings reset on script reload) |
 | Q&A returns empty / crashes | ChromaDB not ingested | `uv run python -m atdj.rag.ingest --tracks` |
 | PLAN reply says "Couldn't find enough tracks" in <1s | The translator failed silently (likely missing API key for the selected provider) | Check the `[tanda_planner]` warning in the Session Log — it includes provider/model/key-set state |
-| Auto-enhance shows 0 tracks | `data/raw/` empty or filenames don't match catalog | Confirm files in `data/raw/` and titles match `reduced_catalog.csv` |
 | Player serves raw audio after enhancement | Browser audio cached; or `data/processed/` doesn't have a newer `_enhanced.wav` | Restart Streamlit or hard-reload the page |
 | `back to default` triggers a planning response | Classifier routed to PLAN | Re-phrase with clearer audio-adjustment vocabulary (loud/soft/bass/harsh/reset) so the classifier reliably picks ADJUST_AUDIO |
 | Clarification question, then second message starts a new request | `pending_adjustment` cleared by a page reload | Don't reload mid-clarification; resend the original |

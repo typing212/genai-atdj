@@ -33,8 +33,6 @@ The final answer is generated later in `query.py`, which can:
 import re
 import requests
 
-# Original import (hardcoded to config keys):
-# from atdj.config import KNOWLEDGE_DIR, GOOGLE_API_KEY, GEMINI_MODEL, ANTHROPIC_API_KEY, CLAUDE_MODEL
 from atdj.config import KNOWLEDGE_DIR, ANTHROPIC_API_KEY, CLAUDE_MODEL, get_ui_llm
 
 REQUEST_TIMEOUT = 5
@@ -42,7 +40,7 @@ MAX_WIKI_CHARS = 3000
 MIN_WIKI_CHARS = 80
 
 
-# ── Helper Functions to Extract Keywords from Query ───────────────────────
+# Helper functions to extract keywords from query
 
 def _normalize_text(text: str) -> str:
     """Lowercase, remove extra punctuation, normalize spaces/underscores/hyphens."""
@@ -83,14 +81,8 @@ def _extract_lookup_query_with_gemini(query: str) -> str:
 
     Intended only for more complex user questions after regex cleanup.
     """
-    from langchain_google_genai import ChatGoogleGenerativeAI
     from langchain_core.messages import HumanMessage
 
-    # Original implementation (hardcoded to Gemini from config):
-    # llm = ChatGoogleGenerativeAI(
-    #     model=GEMINI_MODEL,
-    #     google_api_key=GOOGLE_API_KEY,
-    # )
     llm = get_ui_llm()
 
     prompt = f"""You are helping a retrieval system choose a short lookup query.
@@ -171,7 +163,7 @@ def _meaningful_tokens(text: str) -> list[str]:
     return [t for t in tokens if len(t) > 2 and t not in stopwords]
 
 
-# ── Wikipedia ─────────────────────────────────────────────────────────────
+# Wikipedia
 
 def _fetch_wikipedia(query: str) -> dict:
     """
@@ -300,7 +292,7 @@ def _fetch_wikipedia(query: str) -> dict:
         }
 
 
-# ── Local markdown fallback / preferred source ────────────────────────────
+# Local markdown fallback / preferred source
 
 def _load_local_knowledge(query: str) -> dict:
     """
@@ -381,7 +373,7 @@ def _load_local_knowledge(query: str) -> dict:
     }
 
 
-# ── Public API ─────────────────────────────────────────────────────────────
+# Public API
 
 def fetch_knowledge(query: str, use_cache: bool = True) -> dict:
     """

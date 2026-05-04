@@ -45,9 +45,7 @@ from essentia.standard import (
 )
 
 
-# ============================================================
 # Helpers
-# ============================================================
 
 def to_float(x: Any) -> Optional[float]:
     try:
@@ -179,9 +177,7 @@ def split_album_and_filename(file_name: str) -> Tuple[str, str]:
     return "", file_name
 
 
-# ============================================================
-# Handcrafted features  (Essentia owns these)
-# ============================================================
+# Handcrafted features (Essentia owns these)
 
 def extract_handcrafted_features(audio_path: Path) -> Dict[str, Any]:
     extractor = MusicExtractor(
@@ -225,9 +221,7 @@ def extract_handcrafted_features(audio_path: Path) -> Dict[str, Any]:
     return features
 
 
-# ============================================================
 # Model registry
-# ============================================================
 
 MODEL_SPECS = {
     "is_danceable": {
@@ -352,9 +346,7 @@ EMBEDDER_SPECS = {
 }
 
 
-# ============================================================
 # TF inference
-# ============================================================
 
 def load_audio_for_embedder(audio_path: Path, sample_rate: int) -> np.ndarray:
     return MonoLoader(
@@ -459,9 +451,7 @@ def run_model_suite(audio_path: Path, models_dir: Path, enabled_models: List[str
     return result
 
 
-# ============================================================
 # Aliases + binary cleanup
-# ============================================================
 
 def add_convenience_aliases(features: Dict[str, Any]) -> Dict[str, Any]:
     out = dict(features)
@@ -523,9 +513,7 @@ def drop_binary_raw_columns(features: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
-# ============================================================
 # File discovery + per-track extraction
-# ============================================================
 
 def find_mp3_files(input_root: Path) -> List[Path]:
     return sorted(p for p in input_root.glob("*.mp3") if p.is_file())
@@ -551,9 +539,7 @@ def extract_one_file(
     return row
 
 
-# ============================================================
 # Main
-# ============================================================
 
 def main() -> None:
     parser = argparse.ArgumentParser(

@@ -35,9 +35,7 @@ import librosa
 N_MFCC = 13
 
 
-# ============================================================
 # Helpers
-# ============================================================
 
 def stats_1d(x: Any, prefix: str) -> Dict[str, float]:
     x = np.asarray(x).flatten()
@@ -67,9 +65,7 @@ def split_album_and_filename(file_name: str) -> Tuple[str, str]:
     return "", file_name
 
 
-# ============================================================
 # Feature extraction
-# ============================================================
 
 def extract_audio_features(mp3_path: Path) -> Dict[str, Any]:
     y, sr = librosa.load(str(mp3_path), sr=None, mono=True)
@@ -131,17 +127,13 @@ def extract_audio_features(mp3_path: Path) -> Dict[str, Any]:
     return features
 
 
-# ============================================================
 # File discovery
-# ============================================================
 
 def find_mp3_files(input_root: Path) -> List[Path]:
     return sorted(p for p in input_root.glob("*.mp3") if p.is_file())
 
 
-# ============================================================
 # Main
-# ============================================================
 
 def main() -> None:
     parser = argparse.ArgumentParser(

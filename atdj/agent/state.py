@@ -17,11 +17,6 @@ class LogEntry(TypedDict):
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
     session: PlanSession
-    # Original (Tina): energy_arc was a planning-target curve (low→high→moderate)
-    # computed in session_init and read by tanda_planner to derive a per-tanda mood.
-    # Removed — the user-facing Energy Arc chart now reads actual selected-track
-    # energies directly from the catalog, so the internal target curve is unused.
-    # energy_arc: list[float]
     current_tanda_index: int
     upcoming_tandas: list[Tanda]
     pending_feedback: list[FeedbackEvent]
@@ -39,13 +34,9 @@ class AgentState(TypedDict):
     activity_log: Annotated[list[LogEntry], operator.add]
     # Per-tanda prompts handed in from the UI (one tuple per tanda: (prompt, style)),
     # and the tracks each call to tanda_planner selects. The UI reads picked_tracks
-    # from the final state to build the playlist — this lets tanda_planner own the
-    # selection step end-to-end instead of running it in a separate loop in page_main.py.
+    # from the final state to build the playlist.
     session_plan: list[tuple[str, str]]
     picked_tracks: list[list[dict]]
-    # 2026-05-01 (Vanessa): per-tanda cortina selections produced by the
-    # cortina_selector node. Each call appends one dict {title, filename,
-    # duration_seconds} so the UI can read them in order and present the
-    # actual cortina that will play (instead of the previous generic
-    # "Cortina" placeholder). Reducer: operator.add → list grows.
+    # Per-tanda cortina selections produced by the cortina_selector node.
+    # Reducer: operator.add → list grows by one dict per cortina.
     selected_cortinas: Annotated[list[dict], operator.add]

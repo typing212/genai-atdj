@@ -12,18 +12,18 @@ dependencies = [
     "pandas>=3.0.1",
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
-    # WP-01
+    # Project setup — schemas, env, tests
     "pydantic>=2.0",
     "python-dotenv>=1.0",
     "pytest>=8.0",
-    # WP-02
+    # Audio feature extraction
     "mutagen>=1.47",
     "librosa>=0.10",
     "joblib>=1.3",
-    # WP-02 scraper
+    # TodoTango metadata scraper
     "requests>=2.32",
     "beautifulsoup4>=4.12",
-    # WP-03
+    # UI and agent stack
     "streamlit>=1.32",
     "pip>=26.0.1",
     "google-genai>=1.70.0",

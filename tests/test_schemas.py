@@ -87,7 +87,7 @@ def test_tanda_too_many_tracks():
 
 
 def test_tanda_mixed_orchestras_allowed():
-    # Orchestra homogeneity is a soft rule enforced by the planner (WP-05), not Pydantic
+    # Orchestra homogeneity is a soft rule enforced by the planner layer, not Pydantic
     tracks = make_tanda_tracks(3)
     tracks[2] = make_track(id="t_other", orchestra="Troilo")
     tanda = Tanda(

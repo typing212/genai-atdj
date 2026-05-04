@@ -706,6 +706,36 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                             "duration": "0:20", "source": "agent",
                         })
 
+                if new_playlist and not is_full_session:
+                    # Generate a closing cortina for single-tanda plans
+                    from atdj.config import get_ui_api_key, get_ui_provider, GEMINI_API_KEY
+                    _provider = get_ui_provider()
+                    _api_key = (get_ui_api_key() if _provider == "Gemini" else "") or GEMINI_API_KEY
+                    if _api_key and picked_per_tanda:
+                        from datetime import datetime as _dt
+                        try:
+                            from atdj.cortina.generator import generate_cortina
+                            from atdj.config import ROOT_DIR
+                            _cortina = generate_cortina(
+                                prev_tracks=picked_per_tanda[0],
+                                next_style=None,
+                                output_dir=ROOT_DIR / "data" / "cortinas" / "generated",
+                                api_key=_api_key,
+                            )
+                            new_playlist.append(_cortina)
+                            st.session_state.setdefault("agent_notifications", []).append({
+                                "type": "info",
+                                "text": f"🎵 CORTINA — Generated closing cortina via Lyria ({_cortina.get('title', 'Cortina')})",
+                                "timestamp": _dt.now().strftime("%H:%M:%S"),
+                            })
+                        except Exception as _e:
+                            new_playlist.append({"type": "cortina", "title": "Cortina", "duration": "0:20", "source": "agent"})
+                            st.session_state.setdefault("agent_notifications", []).append({
+                                "type": "warning",
+                                "text": f"🎵 CORTINA — Lyria generation failed, using placeholder ({_e})",
+                                "timestamp": _dt.now().strftime("%H:%M:%S"),
+                            })
+
                 if new_playlist:
                     # Append to the existing queue instead of overwriting it,
                     # so successive plans stack rather than replacing the previous tanda.

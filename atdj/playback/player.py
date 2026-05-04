@@ -111,6 +111,8 @@ class PlaybackQueue:
         return str(path) if path.exists() else None
 
     def _resolve_cortina(self, item: dict) -> str | None:
+        if item.get("file_path") and Path(item["file_path"]).exists():
+            return item["file_path"]
         cortinas_path = Path(CORTINAS_DIR)
         if not cortinas_path.exists():
             return None

@@ -13,6 +13,8 @@ Two collections are used across the project:
   "domain_knowledge" – chunked markdown knowledge docs (orchestra bios, etc.)
 """
 
+from __future__ import annotations
+
 import chromadb
 from chromadb.config import Settings
 from atdj.config import CHROMA_DIR

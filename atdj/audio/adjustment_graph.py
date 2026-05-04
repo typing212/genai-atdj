@@ -26,7 +26,7 @@ from atdj.audio.enhancement import (
 )
 from atdj.config import PROCESSED_DIR, get_ui_llm
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# Constants
 
 FEATURE_PARAM = {
     "loudness": "target_lufs",
@@ -115,7 +115,7 @@ If the user asks to change something that is NOT one of the supported features (
 """
 
 
-# ── State ─────────────────────────────────────────────────────────────────────
+# State
 
 class AdjustmentState(TypedDict):
     user_message: str
@@ -143,23 +143,12 @@ class AdjustmentState(TypedDict):
 
     reply: str
     activity_log: Annotated[list, operator.add]
-    # 2026-05-01: removed `auto_enhance_on`, `store_intent`, `intent_to_store` along
-    # with the Quality Enhance toggle. Audio enhancement now ONLY runs from the chat
-    # path, and `direction=reset` always deletes processed files (no stored intent
-    # to fold into a future PLAN, because there's no auto-enhance-on-PLAN hook).
-
-    # 2026-05-01: routing signal set by the new resolve_pending_menu node so the
-    # graph can branch on whether the user's reply mapped to an open menu option,
-    # cancelled it, or was off-topic.
+    # Routing signal set by resolve_pending_menu so the graph can branch on whether
+    # the user's reply mapped to an open menu option, cancelled it, or was off-topic.
     resolution_outcome: Optional[str]
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
 def _log(node: str, level: str, message: str, summary: bool = False) -> dict:
-    # Original (Tina): no `summary` field. Added 2026-05-01 so the on-screen Session
-    # Log can filter to one user-facing line per audio adjustment while the JSON file
-    # still receives every sub-step for fault tracking.
     return {"timestamp": datetime.now().isoformat(), "node": node,
             "level": level, "message": message, "summary": summary}
 
@@ -193,7 +182,7 @@ def _get_llm():
     return get_ui_llm()
 
 
-# ── Pure helpers (exported for tests) ────────────────────────────────────────
+# Pure helpers (exported for tests)
 
 def apply_constraint(direction: str, ref_value: float, delta: float,
                      track_auto_value: float) -> float:
@@ -242,7 +231,7 @@ def resolve_targets(scope: str, playlist: list[dict], current_index: int,
     return []
 
 
-# ── Menu-pick resolver (2026-05-01) ──────────────────────────────────────────
+# Menu-pick resolver
 # Without this layer, a reply like "1" or "cancel" goes straight into parse_request
 # and the LLM treats it as a fresh ambiguous message. The resolver maps menu picks
 # heuristically (cheap, no extra LLM call) so the graph can carry forward the prior
@@ -412,7 +401,7 @@ def emit_cancel(state: AdjustmentState) -> dict:
     return {"reply": state.get("reply") or "Okay — no adjustment applied."}
 
 
-# ── Nodes ─────────────────────────────────────────────────────────────────────
+# Nodes
 
 def parse_request(state: AdjustmentState) -> dict:
     summary = _playlist_summary(state["playlist"], state["current_index"])
@@ -736,7 +725,7 @@ def format_reply(state: AdjustmentState) -> dict:
     }
 
 
-# ── Routing ───────────────────────────────────────────────────────────────────
+# Routing
 
 def _route_after_resolve_menu(state: AdjustmentState) -> str:
     outcome = state.get("resolution_outcome")
@@ -765,7 +754,7 @@ def _route_after_resolve(state: AdjustmentState) -> str:
     return "measure_reference"
 
 
-# ── Graph builder ──────────────────────────────────────────────────────────────
+# Graph builder
 
 def build_adjustment_graph() -> StateGraph:
     g = StateGraph(AdjustmentState)

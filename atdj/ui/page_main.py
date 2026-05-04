@@ -620,42 +620,14 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                 for entry in final_state.get("activity_log", []):
                     st.session_state.setdefault("activity_log", []).append(entry)
 
-                # Original parallel selection loop kept below (commented) for reference.
-                # Replaced by tanda_planner, which now calls search_catalog_rag itself
-                # and writes the chosen tracks into state["picked_tracks"].
-                # from atdj.rag.select_tanda import select_tanda as _select_tanda
-                # from atdj.rag.prompt_to_features import build_translator, load_catalog
-                # from atdj.config import RAG_CATALOG_PATH
-                # df = _get_rag_catalog()
-                # translator = _get_rag_translator(
-                #     st.session_state.get("s_provider", "Claude").lower()
-                # )
-                # tanda_rules = {"tango": 4, "vals": 3, "milonga": 3}
-                # new_playlist = []
-                # tanda_idx = 0
-                # for tanda_prompt, style in session_plan:
-                #     bundle = translator.translate(tanda_prompt)
-                #     result = _select_tanda(bundle, df)
-                #     if result and result.tanda:
-                #         expected_count = tanda_rules.get(style, 4)
-                #         tracks = result.tanda[:expected_count]
-                #         for i, track in enumerate(tracks):
-                #             new_playlist.append({...})
-                #         if tanda_idx < len(session_plan) - 1:
-                #             new_playlist.append({"type": "cortina", ...})
-                #         tanda_idx += 1
-
                 new_playlist = []
                 picked_per_tanda = final_state.get("picked_tracks") or []
-                # 2026-05-01: load pq up front so the cortina-title resolver below
-                # can use it. Was previously only loaded after the loop, which broke
-                # the new resolver call with UnboundLocalError.
+                # Load pq up front so the cortina-title resolver below can use it.
                 pq = _get_pq()
-                # 2026-05-01: offset tanda_id by the max already in the playlist so
-                # each PLAN run gets globally unique ids. Without this, every plan
-                # restarts at 0 and `next_tanda` audio adjustments collapse all songs
-                # with the same per-plan index across every plan into one giant target
-                # set (e.g. 5 plans × 2-3 tracks each = 12+ tracks for one "next tanda").
+                # Offset tanda_id by the max already in the playlist so each PLAN run
+                # gets globally unique ids. Without this, every plan restarts at 0 and
+                # `next_tanda` audio adjustments collapse all songs with the same
+                # per-plan index across every plan into one giant target set.
                 _existing_max_tid = max(
                     (p.get("tanda_id", -1) for p in pq.items if p.get("type") == "song"),
                     default=-1,

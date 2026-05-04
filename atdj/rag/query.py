@@ -40,8 +40,6 @@ AI-generated and not grounded in retrieved external knowledge.
 
 import re
 
-# Original import (hardcoded to config keys):
-# from atdj.config import GOOGLE_API_KEY, GEMINI_MODEL, ANTHROPIC_API_KEY, CLAUDE_MODEL
 from atdj.config import ANTHROPIC_API_KEY, CLAUDE_MODEL, get_ui_llm
 from atdj.rag.store import (
     get_client,
@@ -54,16 +52,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────
+# Helpers
 
 def _get_llm():
     """Return the LLM for the provider/key selected in the UI."""
-    # Original implementation (hardcoded to Gemini from config):
-    # from langchain_google_genai import ChatGoogleGenerativeAI
-    # return ChatGoogleGenerativeAI(
-    #     model=GEMINI_MODEL,
-    #     google_api_key=GOOGLE_API_KEY,
-    # )
     return get_ui_llm()
 
 
@@ -386,7 +378,7 @@ def _answer_catalog_field_question(
     return f"The {nice_field} of '{title}' is {value}."
 
 
-# ── 1. retrieve_tracks ─────────────────────────────────────────────────────
+# 1. retrieve_tracks
 
 def retrieve_tracks(
     question: str,
@@ -418,7 +410,7 @@ def retrieve_tracks(
     return _format_track_results(results)
 
 
-# ── 2. retrieve_local_knowledge ────────────────────────────────────────────
+# 2. retrieve_local_knowledge
 
 def retrieve_local_knowledge(
     question: str,
@@ -444,7 +436,7 @@ def retrieve_local_knowledge(
     return _format_knowledge_results(results)
 
 
-# ── 3. answer_question ─────────────────────────────────────────────────────
+# 3. answer_question
 
 def answer_question(
     question: str,
@@ -551,7 +543,7 @@ Source policy:
     return response.content
 
 
-# ── 4. search_for_planning ─────────────────────────────────────────────────
+# 4. search_for_planning
 
 def search_for_planning(
     style: str,

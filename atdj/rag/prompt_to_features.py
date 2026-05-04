@@ -386,12 +386,7 @@ class GeminiTranslator(BaseTranslator):
         self._HumanMessage = HumanMessage
         self._SystemMessage = SystemMessage
         self._model = model_name or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
-        # Original (Nancy) — preserved below; renamed env var to GEMINI_API_KEY
-        # for naming consistency with GEMINI_MODEL. The legacy GOOGLE_API_KEY
-        # is still honoured as a fallback so existing .env files keep working.
-        # key = api_key or os.getenv("GOOGLE_API_KEY")
-        # if not key:
-        #     raise ValueError("Missing GOOGLE_API_KEY")
+        # Legacy GOOGLE_API_KEY honoured as a fallback so older .env files keep working.
         key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
         if not key:
             raise ValueError("Missing GEMINI_API_KEY")

@@ -21,17 +21,41 @@ from langchain_core.messages import HumanMessage
 # ── Feature extraction ────────────────────────────────────────────────────────
 
 def _summarize_tanda(tracks: list[dict]) -> dict:
-    style = tracks[0].get("style", "tango") if tracks else "tango"
+    # Dominant style (most common across all tracks)
+    styles = [t.get("style", "tango") for t in tracks if t.get("style")]
+    style = max(set(styles), key=styles.count) if styles else "tango"
+
     orchestra = tracks[0].get("orchestra", "unknown") if tracks else "unknown"
     decade = tracks[0].get("decade", "1940s") if tracks else "1940s"
+
+    # Average energy and BPM across all tracks
     energies = [t.get("energy") for t in tracks if t.get("energy") is not None]
     avg_energy = mean(energies) if energies else 0.5
     energy_label = "high" if avg_energy > 0.7 else "moderate" if avg_energy > 0.4 else "low"
+
+    bpms = [t.get("bpm") for t in tracks if t.get("bpm") is not None]
+    avg_bpm = round(mean(bpms)) if bpms else None
+
+    # Derive mood from style + energy + bpm
+    if style == "milonga":
+        mood = "playful and festive" if avg_energy > 0.5 else "light and rhythmic"
+    elif style == "vals":
+        mood = "romantic and flowing" if avg_energy < 0.6 else "elegant and sweeping"
+    else:  # tango
+        if energy_label == "high":
+            mood = "dramatic and intense"
+        elif energy_label == "low":
+            mood = "melancholic and tender"
+        else:
+            mood = "expressive and danceable"
+
     return {
         "style": style,
         "orchestra": orchestra,
         "decade": decade,
         "energy_label": energy_label,
+        "avg_bpm": avg_bpm,
+        "mood": mood,
     }
 
 
@@ -40,26 +64,35 @@ def _summarize_tanda(tracks: list[dict]) -> dict:
 def _craft_music_prompt(prev: dict, next_style: str | None) -> str:
     from atdj.config import get_ui_llm
     llm = get_ui_llm()
+
+    bpm_line = f"Tanda BPM: ~{prev['avg_bpm']}" if prev.get("avg_bpm") else ""
+
     if next_style:
         instruction = f"""Write a short music generation prompt (2-3 sentences) for a 25-second cortina transition.
 
-Exiting: a {prev['energy_label']}-energy {prev['style']} tanda by {prev['orchestra']} ({prev['decade']})
-Entering: a {next_style} tanda
+Tanda just played: a {prev['energy_label']}-energy {prev['mood']} {prev['style']} tanda by {prev['orchestra']} ({prev['decade']})
+{bpm_line}
+Next tanda style: {next_style}
 
 Rules:
-- No bandoneon, no tango rhythm — the cortina must sound clearly non-tango
-- Brief, neutral, acts as a musical breath between sets
-- Describe instrumentation, mood, and the transition arc in plain musical terms
+- Must sound completely non-tango — choose a different genre entirely (e.g. jazz, soul, bossa nova, funk, pop, ambient electronic)
+- NO bandoneon, NO tango rhythm or compás
+- Energy level must match the tanda: {prev['energy_label']} energy
+- BPM should stay close to the tanda's tempo so the transition feels natural on the dance floor
+- Describe the genre, instrumentation, mood, and energy in plain musical terms
 - Reply with the prompt only — no markdown, no explanation"""
     else:
-        instruction = f"""Write a short music generation prompt (2-3 sentences) for a 25-second closing cortina.
+        instruction = f"""Write a short music generation prompt (2-3 sentences) for a 25-second cortina.
 
-Closing: a {prev['energy_label']}-energy {prev['style']} tanda by {prev['orchestra']} ({prev['decade']})
+Tanda just played: a {prev['energy_label']}-energy {prev['mood']} {prev['style']} tanda by {prev['orchestra']} ({prev['decade']})
+{bpm_line}
 
 Rules:
-- No bandoneon, no tango rhythm — the cortina must sound clearly non-tango
-- Should feel like a gentle musical close — signals the end of the set, fades to neutral
-- Describe instrumentation and mood in plain musical terms
+- Must sound completely non-tango — choose a different genre entirely (e.g. jazz, soul, bossa nova, funk, pop, ambient electronic)
+- NO bandoneon, NO tango rhythm or compás
+- Energy level must match the tanda: {prev['energy_label']} energy
+- BPM should stay close to the tanda's tempo so the transition feels natural on the dance floor
+- Describe the genre, instrumentation, mood, and energy in plain musical terms
 - Reply with the prompt only — no markdown, no explanation"""
     response = llm.invoke([HumanMessage(content=instruction)])
     return response.content.strip()

@@ -112,18 +112,79 @@ DEFAULT_TANDA_SIZE = 4
 EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 
-# ── Lazy-loaded embedding model ────────────────────────────────────────────
+# ── Embedding model — two-level cache ─────────────────────────────────────
+#
+# Level 1 (Streamlit session): st.cache_resource — one load per server process.
+# Level 2 (CLI / tests): module-level singleton — one load per Python process.
+#
+# _st_is_running() gates which path is taken so show_spinner (which requires
+# a live session context) is never called from bare-Python / test contexts.
 
 _model: Optional["SentenceTransformer"] = None
 
 
-def _get_model() -> Optional["SentenceTransformer"]:
+def _st_is_running() -> bool:
+    """True only when executing inside a live Streamlit session."""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        return get_script_run_ctx() is not None
+    except Exception:
+        return False
+
+
+def _load_model_plain() -> Optional["SentenceTransformer"]:
     global _model
     if not _ST_AVAILABLE:
         return None
     if _model is None:
         _model = SentenceTransformer(EMBEDDING_MODEL_NAME)
     return _model
+
+
+def _get_model() -> Optional["SentenceTransformer"]:
+    if _st_is_running():
+        import streamlit as st
+
+        @st.cache_resource
+        def _cached_model():
+            if not _ST_AVAILABLE:
+                return None
+            return SentenceTransformer(EMBEDDING_MODEL_NAME)
+
+        return _cached_model()
+    return _load_model_plain()
+
+
+# ── Catalog feature ranges — module-level cache ────────────────────────────
+#
+# The four (min, max) pairs are derived from the full catalog and never change
+# mid-session. Cached after the first call; invalidated if the catalog changes
+# (detected via a fingerprint of the bpm column values).
+
+_catalog_ranges: Optional[dict] = None
+_catalog_ranges_key: Optional[tuple] = None
+
+
+def _get_catalog_ranges(catalog_df: pd.DataFrame) -> dict:
+    """Return {feature: (min, max)} for the four scored features, cached."""
+    global _catalog_ranges, _catalog_ranges_key
+
+    key = tuple(catalog_df["bpm"].dropna().values)
+    if _catalog_ranges is not None and key == _catalog_ranges_key:
+        return _catalog_ranges
+
+    def _range(col: str):
+        vals = catalog_df[col].dropna().astype(float)
+        return float(vals.min()), float(vals.max())
+
+    _catalog_ranges = {
+        "bpm":                 _range("bpm"),
+        "danceability":        _range("danceability"),
+        "chords_changes_rate": _range("chords_changes_rate"),
+        "energy":              _range("energy"),
+    }
+    _catalog_ranges_key = key
+    return _catalog_ranges
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -316,14 +377,12 @@ def _score_candidates(df: pd.DataFrame, merged: dict,
     """
     # Pre-compute feature ranges from the FULL catalog so targets are
     # calibrated to the global distribution, not just the filtered subset.
-    def _range(col: str):
-        vals = catalog_df[col].dropna().astype(float)
-        return float(vals.min()), float(vals.max())
-
-    bpm_min,   bpm_max   = _range("bpm")
-    dance_min, dance_max = _range("danceability")
-    chord_min, chord_max = _range("chords_changes_rate")   # raw float column
-    energy_min, energy_max = _range("energy")
+    # Result is module-level cached — free after the first call.
+    ranges = _get_catalog_ranges(catalog_df)
+    bpm_min,    bpm_max    = ranges["bpm"]
+    dance_min,  dance_max  = ranges["danceability"]
+    chord_min,  chord_max  = ranges["chords_changes_rate"]
+    energy_min, energy_max = ranges["energy"]
 
     query_tags = [str(t).lower() for t in merged.get("tags", []) if t]
 

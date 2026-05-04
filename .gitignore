@@ -50,4 +50,5 @@ vendor/AudioSep
 
 # Don't track ai_usage for now
 doc/ai_usage.md.DS_Store
-doc/ai_usage.md
+doc/ai_usage.md.DS_Store
+.Rhistory

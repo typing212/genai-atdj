@@ -26,6 +26,8 @@ Or import:
 
 from __future__ import annotations
 
+import functools
+import hashlib
 import json
 import os
 import re
@@ -78,7 +80,8 @@ class TranslationBundle:
 
 # ── Catalog helpers ───────────────────────────────────────────────────────
 
-def load_catalog(csv_path: str | Path) -> pd.DataFrame:
+def _load_catalog_raw(csv_path: str | Path) -> pd.DataFrame:
+    """Actual CSV read + validation. Called by both cache layers."""
     df = pd.read_csv(Path(csv_path))
     required = {
         "title", "orchestra", "singer", "year", "decade", "style", "album",
@@ -92,6 +95,48 @@ def load_catalog(csv_path: str | Path) -> pd.DataFrame:
     if missing:
         raise ValueError(f"Missing required columns in catalog: {missing}")
     return df
+
+
+# Plain-Python module-level cache: resolved path string → DataFrame.
+# Used when Streamlit is not running (CLI, tests, debug scripts).
+_catalog_cache: dict[str, pd.DataFrame] = {}
+
+
+def _st_is_running() -> bool:
+    """Return True only when code is executing inside a live Streamlit session."""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        return get_script_run_ctx() is not None
+    except Exception:
+        return False
+
+
+def load_catalog(csv_path: str | Path) -> pd.DataFrame:
+    """
+    Load and validate the track catalog CSV.
+
+    • Inside a Streamlit session  → st.cache_data (survives reruns, one read per session).
+    • Outside Streamlit (CLI / tests) → module-level dict keyed by resolved path.
+
+    The public signature is unchanged: pass any relative or absolute path.
+    """
+    if _st_is_running():
+        # Import here so the module works without Streamlit installed.
+        import streamlit as st
+
+        # Wrap with cache_data at call-time — no show_spinner so it's safe
+        # to call from any thread context, including tests that import st.
+        @st.cache_data
+        def _cached(path_str: str) -> pd.DataFrame:
+            return _load_catalog_raw(path_str)
+
+        return _cached(str(Path(csv_path).resolve()))
+
+    # Plain-Python path — module-level dict cache.
+    key = str(Path(csv_path).resolve())
+    if key not in _catalog_cache:
+        _catalog_cache[key] = _load_catalog_raw(csv_path)
+    return _catalog_cache[key]
 
 
 def _build_catalog_context(df: pd.DataFrame) -> str:
@@ -250,6 +295,10 @@ class BaseTranslator:
     def __init__(self, catalog_df: pd.DataFrame) -> None:
         self.df = catalog_df.copy()
         self.catalog_context = _build_catalog_context(self.df)
+        # Per-instance cache: SHA-256(prompt + model) → TranslationBundle.
+        # Avoids paying the LLM round-trip when the agent replans with the
+        # same prompt within a session.
+        self._translation_cache: dict[str, "TranslationBundle"] = {}
 
     def _call_llm(self, user_text: str) -> str:
         raise NotImplementedError
@@ -258,6 +307,14 @@ class BaseTranslator:
         raise NotImplementedError
 
     def translate(self, prompt: str) -> TranslationBundle:
+        cache_key = hashlib.sha256(
+            f"{prompt}|{self._model_name()}".encode()
+        ).hexdigest()
+
+        if cache_key in self._translation_cache:
+            print(f"[prompt_to_features] translation cache hit: {prompt!r:.60}")
+            return self._translation_cache[cache_key]
+
         layer1 = extract_year_decade(prompt)
         user_text = USER_TEMPLATE.format(
             prompt=prompt,
@@ -305,10 +362,12 @@ class BaseTranslator:
             "tags": layer2.tags,
         }
 
-        return TranslationBundle(
+        bundle = TranslationBundle(
             prompt=prompt, layer1=layer1, layer2=layer2,
             merged=merged, metadata={"model": self._model_name()},
         )
+        self._translation_cache[cache_key] = bundle
+        return bundle
 
 
 # ── OpenAI implementation ─────────────────────────────────────────────────

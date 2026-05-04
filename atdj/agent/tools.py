@@ -2,7 +2,7 @@ import pandas as pd
 import random
 from langchain_core.tools import tool
 from atdj.config import CATALOG_PATH
-from atdj.rag.select_tanda import select_tanda as _select_tanda
+from atdj.rag.select_tanda_old import select_tanda as _select_tanda
 from atdj.rag.prompt_to_features import build_translator, load_catalog
 
 

@@ -75,7 +75,7 @@ Tanda just played: a {prev['energy_label']}-energy {prev['mood']} {prev['style']
 Next tanda style: {next_style}
 
 Rules:
-- Must sound completely non-tango — choose a different genre entirely (e.g. jazz, soul, bossa nova, funk, pop, ambient electronic)
+- Pick ONE genre randomly from this list (vary your pick every time, do not default to the same genre): jazz, bossa nova, soul, funk, pop, electronic, classical, blues, reggae, cinematic orchestra, lo-fi
 - NO bandoneon, NO tango rhythm or compás
 - Energy level must match the tanda: {prev['energy_label']} energy
 - BPM should stay close to the tanda's tempo so the transition feels natural on the dance floor
@@ -88,7 +88,7 @@ Tanda just played: a {prev['energy_label']}-energy {prev['mood']} {prev['style']
 {bpm_line}
 
 Rules:
-- Must sound completely non-tango — choose a different genre entirely (e.g. jazz, soul, bossa nova, funk, pop, ambient electronic)
+- Pick ONE genre randomly from this list (vary your pick every time, do not default to the same genre): jazz, bossa nova, soul, funk, pop, electronic, classical, blues, reggae, cinematic orchestra, lo-fi
 - NO bandoneon, NO tango rhythm or compás
 - Energy level must match the tanda: {prev['energy_label']} energy
 - BPM should stay close to the tanda's tempo so the transition feels natural on the dance floor

@@ -38,6 +38,7 @@ Pulled from `tests/UI_TEST_GUIDE.md` (measured 2026-04-29 to 2026-05-01). Per-ac
 
 Before stepping on stage:
 - Open the app and complete the **3-step provider setup** in the sidebar: pick **Claude**, pick a Claude model, paste the Anthropic key, click **Save Settings**.
+- **Collapse the sidebar** after Save Settings (click the `<<` button at the top of the sidebar). The main panels need the full screen width during the demo, and the Anthropic key shouldn't be on screen.
 - **Pre-warm** by sending one PLAN request and one trivial Q&A, then **Clear**. This caches the Claude client, the RAG indexes, and the Streamlit fragments.
 - Have the chat panel + Now Playing + Full Playlist + Session Log all visible simultaneously.
 - Test audio output at a moderate volume.
@@ -45,40 +46,46 @@ Before stepping on stage:
 
 ---
 
-## Primary script (4:50 + 10s buffer = 5:00)
+## Primary script (4:40 budget + 20s buffer = 5:00)
+
+> **Constraint that drove the script:** the multi-tanda detector in `page_main.py` only triggers on a narrow keyword list (`session`, `full`, `complete`, `tonight`, `milonga night`). A natural "plan X tanda then Y tanda" phrasing is parsed as a single tanda; using one of the keywords flips the system into a 29-track full-milonga path that takes ~40s to plan and overwhelms the demo. There is no in-between today, so the live script uses **one tanda** and the rejection-menu reply *"Apply to all songs after this one (rest of session)"* to enhance the remaining tracks. The talking point — *"current track is read-only, the correction applies to upcoming tracks"* — lands either way; only the scope label changes.
 
 | Time | Segment | Action | Notes |
 |------|---------|--------|-------|
 | 0:00–0:25 | Frame | "AT-DJ is an AI tango DJ with three modes: PLAN, Q&A, ADJUST_AUDIO. Today's focus is the audio-adjustment loop." Point at panels. | Pure narration |
-| 0:25–1:10 | PLAN (2 tandas) | Type prompt option A or B; ~6s warm-up + ~14s LLM (2 × ~7s) + ~25s narrate while watching the playlist + cortina row appear. | Plans 2 tandas so "next tanda" exists for the rejection-menu scenario |
-| 1:10–1:35 | Music starts | Click ▶ on track 1; let ~20s play; click skip-to-end-of-current-tanda so we arrive at the second tanda's first track. | Audience hears tango; establishes the "before" sound |
-| 1:35–2:50 | ADJUST scenario — rejection menu, full circle | Type "Make this song louder." (5s) + warm-up (6s) + reply with menu (16.4s) + read menu (8s) + reply "2" (3s) + warm-up (6s) + apply enhancement on next tanda (~25s including DSP on 4 tracks) + read confirmation (5s). | Showcases the design intent: current track is read-only reference; corrections apply to upcoming tracks |
-| 2:50–3:15 | Audible result + narration | Skip into the now-enhanced next tanda; let 10s play; narrate the difference. | The payoff: audience HEARS the change |
-| 3:15–3:55 | Q&A (single round-trip) | Type one short question (5s) + warm-up (6s) + answer (~17s) + read (12s). Use prompt option A or C. | Demonstrates the third mode |
-| 3:55–4:40 | Session log + wrap | Open the Session Log panel; point out the structured entries (📋 PLAN summary, 🎛 AUDIO summary). One sentence: "Everything the agent did is logged for replay." | Shows engineering rigor |
+| 0:25–1:10 | PLAN (1 tanda) | Type the PLAN prompt; ~6s warm-up + ~12s LLM + ~25s narrate while watching the 4 tracks and the cortina row appear. | Plans one Pugliese tanda (4 tracks). Measured ~30s end-to-end on cold start. |
+| 1:10–1:35 | Music starts | Click ▶ on track 1; let ~20s play; click ⏭ to advance to track 2. | Audience hears tango; establishes the "before" sound. The ⏭ moves us inside the same tanda so 2-3 tracks remain after the cursor for the adjustment to land on. |
+| 1:35–2:50 | ADJUST scenario — rejection menu, full circle | Type "Make this song louder." (5s) + warm-up (6s) + rejection menu reply (~10s) + read menu (8s) + reply "1" (3s) + warm-up (6s) + apply enhancement on the rest of the tanda (~25s, DSP on 2-3 tracks) + read confirmation (5s). | Showcases the design intent: current track is read-only; correction applies to the upcoming tracks of the rest of the session. |
+| 2:50–3:15 | Audible result + narration | Skip ⏭ into a now-enhanced track; let 10s play; narrate the difference. | The payoff: audience HEARS the change. |
+| 3:15–3:55 | Q&A (single round-trip) | Type one short question (5s) + warm-up (6s) + answer (~17s) + read (12s). | Demonstrates the third mode. |
+| 3:55–4:40 | Session log + wrap | Point at the Session Log panel; call out the structured entries (📋 PLAN summary, 🎛 AUDIO summary). One sentence: "Everything the agent did is logged for replay." | Shows engineering rigor. |
 | 4:40–5:00 | Buffer | 20s slack for one segment running long, or audience reaction. | |
+
+Measured wall-clock from the rehearsal harness on a cold-start run: **3:33** total — comfortably under the 4:40 budget, with the buffer absorbing per-segment overshoot.
 
 ---
 
 ## Prompt options (pick one per segment)
 
-**PLAN segment (2 tandas)** — pick one. Tested latencies in parens.
-- A. `"Plan a Pugliese tango tanda from the 1940s, then a D'Arienzo tango tanda."` — both orchestras have measured PLAN latencies (7.9s + ~7s). **Recommended**.
-- B. `"Plan a Di Sarli tanda then a Pugliese tanda, both from the 1940s."` — Di Sarli 6.7s, Pugliese 7.9s, audibly different so the contrast lands.
-- C. `"Plan two short milonga tandas."` — fastest if both come back from cache; rhythmically distinctive but less dramatic an "audio adjust" demo because milongas are already punchy.
+**PLAN segment (1 tanda)** — pick one.
+- A. `"Plan a Pugliese tango tanda from the 1940s."` — measured ~30s end-to-end including warm-up; reliably produces 4 Pugliese tracks. **Recommended**.
+- B. `"Plan a Di Sarli tanda from the 1940s."` — same shape; Di Sarli's smoother style contrasts more obviously with audio adjustment.
+- C. `"Plan a short milonga tanda."` — fastest cache; rhythmically punchy but less dramatic for an audio-adjust demo.
 
-⚠️ Don't use `"Plan me a full milonga session"` — measured at 33.8s, eats the ADJUST_AUDIO budget.
+⚠️ **Avoid these phrasings:**
+- *"Plan me a full milonga session"* — triggers the full-milonga path, plans ~29 tracks at ~40s LLM cost. Eats the ADJUST_AUDIO budget alone.
+- *"Plan X then Y tanda"* — natural English but does NOT produce 2 tandas (the detector keys on `session`/`full`/`complete`, not on natural conjunction). You will get a single tanda, which makes reply *"next tanda only"* land on the no-targets terminal.
 
-**ADJUST scenario — rejection-menu trigger** (the user message that starts the round-trip), pick one:
-- A. `"Make this song louder."` — explicit "this song"; cleanest scope=current trigger. **Recommended** for clarity.
+**ADJUST scenario — rejection-menu trigger** (the message that starts the round-trip), pick one:
+- A. `"Make this song louder."` — explicit *this song*; cleanest scope=current trigger. **Recommended**.
 - B. `"The current track sounds a bit muddy, fix it."` — natural phrasing; also triggers rejection.
-- C. `"Boost the bass on the playing song."` — same trigger, lets you say "feature=bass" if asked about parsing.
+- C. `"Boost the bass on the playing song."` — same trigger, lets you say *"feature=bass"* if asked about parsing.
 
-**Reply to the rejection menu**, pick one:
-- "2" (numeric form) — covered by Test 9.5.2b, shortest to type. **Recommended**.
-- "Apply to the next tanda only" (text form) — covered by Test 9.5.2; demonstrates the heuristic substring matching.
-
-(Don't use "1" / "Apply to all songs after this" because then DSP runs on every remaining track, which slows the demo. The "next tanda only" path enhances 4 tracks.)
+**Reply to the rejection menu** — what to type after the menu appears:
+- **"1"** — *Apply to all songs after this one (rest of session)*. **Recommended for the current single-tanda script** because it always has real targets (the remaining 2-3 tracks of the tanda), so DSP actually runs.
+- ⚠️ Do **not** use **"2"** (*Apply to the next tanda only*) with the recommended single-tanda PLAN — there is no next tanda, so the agent terminates at the no-targets node with *"No tracks found matching that description after the current position."* and the demo's payoff segment goes silent.
+- *"2"* becomes the right pick again **only if** a future change extends the multi-tanda detector or the demo plans two tandas via two separate PLAN messages.
+- **"3"** / *"cancel"* — terminates with no side effect; only useful for demonstrating the cancel path as a separate spotlight.
 
 **Q&A segment** — pick one. All measured against Claude.
 - A. `"What characterizes Pugliese's style?"` — RAG tango knowledge; ~17s. **Recommended**.
@@ -107,12 +114,41 @@ If something fails on stage:
 
 ## Validation step before demo day
 
-The latency math above is from real measurements but stitched together — actual back-to-back behaviour may differ. Suggested dry-run protocol:
+The latency math above has been verified end-to-end by the rehearsal harness `doc/demo/demo_script.py`. To re-validate before stage time:
 
-1. Run the rehearsal harness `doc/demo/demo_script.py` end-to-end on the laptop you will demo from. The script drives Playwright through the same chat sequence and prints a per-segment wall-clock timestamp so any segment that exceeds budget is visible at a glance.
-2. Aim for the harness to complete in ≤4:50 with the recommended prompts (`A`/`A`/`A`/`A`).
-3. If a segment overruns by >15s, swap to the next-fastest prompt option for that segment (A → C in the lists above) and rerun.
-4. Run the harness at least twice the day before — once cold (no warm-up done) to measure first-call latency, once after warm-up to measure the steady-state numbers the live demo will see.
+1. Start the app: `uv run streamlit run main.py --server.headless true --server.port 8501`.
+2. Run `uv run python doc/demo/demo_script.py`. The script drives Playwright through the same chat sequence the live demo uses, prints a per-segment wall-clock timestamp, and flags any segment that exceeds budget.
+3. Aim for the harness to complete in ≤4:40 with the recommended prompts. The last verified cold-start run came in at 3:33.
+4. If a segment overruns by >15s, swap to the next-fastest prompt option for that segment (A → C in the lists above) and rerun.
+5. Run the harness at least twice the day before — once cold (fresh Streamlit) and once warm — to see the spread.
+
+### Recording with audio (music)
+
+Playwright's built-in `record_video_dir` captures **video frames only**. To produce a recording with the music audible, use the orchestrator script `doc/demo/record_with_audio.py`. It:
+
+1. Starts a WASAPI loopback recorder in a background thread (captures whatever your default speaker is playing — the actual demo music).
+2. Runs `demo_script.py` with `HEADLESS = False` so a real Chromium window opens on your desktop and audio plays through your speakers.
+3. Stops the audio recorder when the demo exits.
+4. Muxes Playwright's silent video and the captured audio into a single `.mp4` under `_rehearsal_artifacts/`.
+
+Prerequisites: `ffmpeg` on PATH (winget install Gyan.FFmpeg) and the Python `soundcard` package (already in `pyproject.toml`).
+
+Run:
+```
+uv run streamlit run main.py --server.headless true --server.port 8501
+uv run python doc/demo/record_with_audio.py
+```
+
+The final file is named `at_dj_demo_<timestamp>.mp4`.
+
+### Recording with voice narration
+
+For voice on top of the music, two options:
+
+- **Live**: instead of `record_with_audio.py`, run the bare `demo_script.py` and capture the screen externally with **OBS Studio** (recommended — captures window + desktop audio + microphone in one go) or **Windows Game Bar** (`Win + G`, microphone capture enabled in Settings → Gaming → Captures).
+- **Post-hoc**: record the silent or audio-only output from the orchestrator, then overlay narration in any video editor (Shotcut, DaVinci Resolve free, Windows Photos).
+
+For demo day itself, recording isn't required — you'll be running live. The recording is the fallback in case something fails on stage.
 
 ---
 
@@ -134,4 +170,14 @@ Each spotlight, what it demonstrates, suggested prompt, and recommended fallback
 ---
 
 ## See also
-- [`demo_script.py`](demo_script.py) — Playwright rehearsal harness for the script above.
+
+### Script files in this folder
+
+Two Python files do the work; they have different jobs.
+
+- **`demo_script.py`** — the *driver*. Opens a Chromium window, sets it on the laptop screen, fills the API key, sends the chat messages and clicks the playback buttons in the right order. Times each segment against the budget. Use it on its own when you just want to **rehearse** the demo flow without producing a recording (it can optionally record silent video via Playwright's built-in recorder, but that's it).
+- **`record_with_audio.py`** — the *orchestrator*. Spawns `demo_script.py` and, in parallel, records the screen pixels (via `ffmpeg gdigrab`) and the system audio (via WASAPI loopback). When the demo finishes, it muxes the video and audio into a single MP4. Use it when you want a **shareable recording with sound**.
+
+Rule of thumb: dry-run with `demo_script.py`, produce the deliverable with `record_with_audio.py`.
+
+- [`recording_notes.md`](recording_notes.md) — debugging history, configuration knobs, and pitfalls hit while making the recording. Read this first if a re-recording attempt fails.

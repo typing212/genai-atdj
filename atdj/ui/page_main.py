@@ -52,7 +52,7 @@ CATALOG_FALLBACK = [
 
 PROVIDER_MODELS = {
     "Claude": ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5"],
-    "Gemini": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
+    "Gemini": ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash"],
     # 2026-05-01: Ollama option removed — `atdj/config.get_ui_llm()` only wires
     # Claude (ChatAnthropic) and Gemini (ChatGoogleGenerativeAI). Anything else
     # silently falls through to ChatGoogleGenerativeAI with the wrong API key.
@@ -555,50 +555,235 @@ def _section_chat():
                 return False
             return True
 
-        if st.session_state.get("pending_adjustment") and _looks_like_menu_pick(msg_text):
+        # ── Convention confirmation: user replied 1 or 2 to the schema warning ──
+        _pending_prompt = st.session_state.get("_full_session_pending_prompt")
+        if _pending_prompt and msg_text.strip() in ("1", "2"):
+            _choice = msg_text.strip()
+            st.session_state.pop("_full_session_pending_prompt", None)
+            if _choice == "1":
+                # Proceed with full mixed set — mark confirmed and replay prompt
+                st.session_state["_full_session_confirmed_prompt"] = _pending_prompt
+                msg_text = _pending_prompt
+                is_planning = True
+                is_audio_adjust = False
+            else:
+                # Single tanda — strip full-session keywords and re-submit
+                _single_text = _pending_prompt
+                for _kw in ["full", "session", "milonga night", "complete", "tonight", "playlist"]:
+                    _single_text = _single_text.replace(_kw, "").strip(" ,.")
+                msg_text = _single_text or _pending_prompt
+                is_planning = True
+                is_audio_adjust = False
+        elif st.session_state.get("pending_adjustment") and _looks_like_menu_pick(msg_text):
             is_planning, is_audio_adjust = False, True
         else:
-            # If pending was set but user clearly moved on, drop the stale
-            # clarification so the audio graph doesn't re-prompt next turn.
             st.session_state.pop("pending_adjustment", None)
             try:
+                import time as _time
+                import re as _re
                 _llm = get_ui_llm()
-                _classify = _llm.invoke([HumanMessage(content=f"""Classify into exactly one category:
+                _classify_prompt = f"""Classify into exactly one category:
 PLAN: plan/find/suggest/change music tracks or playlist
 ADJUST_AUDIO: audio quality changes (too quiet, too loud, too harsh, more bass, noisy, back to default, use original, reset audio, undo changes)
 QUESTION: tango knowledge (history, orchestras, styles)
 Message: "{msg_text.strip()}"
-Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
+Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION"""
+                # Retry up to 3 times on 429 rate-limit, honouring the retry-after hint
+                _classify = None
+                for _attempt in range(3):
+                    try:
+                        _classify = _llm.invoke([HumanMessage(content=_classify_prompt)])
+                        break
+                    except Exception as _e:
+                        _emsg = str(_e)
+                        if "429" in _emsg or "RESOURCE_EXHAUSTED" in _emsg:
+                            # Parse retry delay from error message if present
+                            _match = _re.search(r"retry[^0-9]*([0-9]+(?:\.[0-9]+)?)\s*s", _emsg, _re.I)
+                            _wait = float(_match.group(1)) if _match else 30.0
+                            _wait = min(_wait, 60.0)  # cap at 60s
+                            _reply_slot.markdown(
+                                f"_Rate limit hit — waiting {_wait:.0f}s before retrying "
+                                f"(attempt {_attempt + 1}/3)…_"
+                            )
+                            _time.sleep(_wait)
+                        else:
+                            raise  # non-rate-limit error — surface immediately
+                if _classify is None:
+                    raise RuntimeError("Rate limit retries exhausted. Try switching to Claude in Settings.")
                 label = _classify.content.strip().upper()
                 is_planning = "PLAN" in label
                 is_audio_adjust = "ADJUST_AUDIO" in label
             except Exception as _ce:
-                _reply_slot.markdown(f"_(Classifier error: {_ce}. Treating as Q&A.)_")
-                is_planning, is_audio_adjust = False, False
+                _err_msg = (
+                    f"⚠️ Could not reach the LLM: `{_ce}`\n\n"
+                    f"Check your API key in Settings and try again."
+                )
+                _reply_slot.markdown(_err_msg)
+                st.session_state["chat_msgs"].append({"role": "assistant", "content": _err_msg})
+                st.rerun()
+                return
 
         if is_planning:
             _reply_slot.markdown("_Planning your session..._")
-            if True:
+            try:
                 from atdj.agent.graph import build_graph
                 from atdj.schemas.session import PlanSession
+                from atdj.config import get_ui_api_key, get_ui_provider, GEMINI_API_KEY, ROOT_DIR
+                from atdj.cortina.generator import _summarize_tanda
+                from atdj.cortina.pool import find_best_cortina
+                from atdj.rag.plan_set import plan_set, DEFAULT_SET_SCHEMA
                 from datetime import datetime
+                from datetime import datetime as _dt
                 import uuid
 
-                # Build the per-tanda plan FIRST so the graph can be told how many
-                # tandas to run and what prompt to use for each one.
                 user_prompt_lower = msg_text.strip().lower()
                 is_full_session = any(w in user_prompt_lower for w in ["full", "session", "milonga night", "complete", "tonight"])
+
+                # ── Convention check: full session + single style requested ───
+                # If the user asks for a full playlist but pins a single style
+                # (e.g. "energetic tango full playlist"), warn them that 
+                # convention requires [tango, tango, vals, tango, tango, milonga]
+                # and let them decide before burning any LLM calls.
                 if is_full_session:
-                    session_plan = [
-                        (msg_text.strip() + ", warm opening, low energy", "tango"),
-                        ("vals from the 1940s, romantic and smooth", "vals"),
-                        ("tango from the 1940s, moderate energy", "tango"),
-                        ("milonga, fun and rhythmic", "milonga"),
-                        ("tango from the 1940s, energetic", "tango"),
-                        ("vals from the 1940s, elegant", "vals"),
-                        ("tango from the 1940s, dramatic and intense", "tango"),
-                        ("tango from the 1940s, gentle closing", "tango"),
-                    ]
+                    _style_pins = {"tango", "vals", "milonga"}
+                    _pinned = [s for s in _style_pins if s in user_prompt_lower]
+                    # Bad prompt: user mentioned any specific style + asked for full set.
+                    # Convention requires [tango, tango, vals, tango, tango, milonga] —
+                    # cannot be all one style, so warn before burning any LLM calls.
+                    if len(_pinned) == 1:
+                        # Check if user already confirmed in a previous turn
+                        _confirmed = st.session_state.get("_full_session_confirmed_prompt") == msg_text.strip()
+                        if not _confirmed:
+                            _schema_str = " -> ".join(s.capitalize() for s in DEFAULT_SET_SCHEMA)
+                            _warn = "\n\n".join([
+                                "🎵 A full set follows the traditional structure:",
+                                f"**{_schema_str}**",
+                                f"Your prompt mentions **{_pinned[0]}** as a specific style preference, "
+                                "but the set will include Tango, Vals, and Milonga tandas as required by convention.",
+                                "Reply **1** to proceed with the full mixed set, or **2** for a single tanda matching your preference.",
+                            ])
+                            _reply_slot.markdown(_warn)
+                            st.session_state["chat_msgs"].append({"role": "assistant", "content": _warn})
+                            st.session_state["_full_session_pending_prompt"] = msg_text.strip()
+                            st.rerun()
+                            return
+
+                # ── Shared cortina helper: Lyria → pool → silent placeholder ──
+                def _pick_cortina(tanda_tracks: list[dict], next_style) -> dict:
+                    """Never raises. Returns a playlist-ready cortina dict."""
+                    _placeholder = {"type": "cortina", "title": "Cortina", "duration": "0:20", "source": "agent"}
+
+                    # 1. Try Lyria
+                    _prov = get_ui_provider()
+                    _key = (get_ui_api_key() if _prov == "Gemini" else "") or GEMINI_API_KEY
+                    if _key and tanda_tracks:
+                        try:
+                            from atdj.cortina.generator import generate_cortina
+                            _cor = generate_cortina(
+                                prev_tracks=tanda_tracks, next_style=next_style,
+                                output_dir=ROOT_DIR / "data" / "cortinas" / "generated",
+                                api_key=_key,
+                            )
+                            st.session_state.setdefault("agent_notifications", []).append({
+                                "type": "info",
+                                "text": f"🎵 CORTINA — Generated via Lyria ({_cor.get('title', 'Cortina')})",
+                                "timestamp": _dt.now().strftime("%H:%M:%S"),
+                            })
+                            return _cor
+                        except Exception:
+                            pass
+
+                    # 2. Try pool
+                    try:
+                        _summary = _summarize_tanda(tanda_tracks) if tanda_tracks else {}
+                        _cor = find_best_cortina(_summary)
+                        st.session_state.setdefault("agent_notifications", []).append({
+                            "type": "info",
+                            "text": f"🎵 CORTINA — Selected from pool ({_cor.get('title', 'Cortina')})",
+                            "timestamp": _dt.now().strftime("%H:%M:%S"),
+                        })
+                        return _cor
+                    except Exception:
+                        pass
+
+                    # 3. Silent placeholder
+                    st.session_state.setdefault("agent_notifications", []).append({
+                        "type": "warning",
+                        "text": "🎵 CORTINA — Pool empty, using placeholder. Add mp3s to data/cortinas/pool/.",
+                        "timestamp": _dt.now().strftime("%H:%M:%S"),
+                    })
+                    return _placeholder
+
+                # ── Full-session path: use plan_set ────────────────────────────
+                if is_full_session:
+                    _reply_slot.markdown("_Planning full set via plan_set..._")
+
+                    catalog_df = _get_rag_catalog()
+                    _provider_name = get_ui_provider().lower()
+
+                    set_result = plan_set(
+                        prompt=msg_text.strip(),
+                        catalog_df=catalog_df,
+                        set_schema=DEFAULT_SET_SCHEMA,
+                        provider=_provider_name,
+                        verbose=False,
+                    )
+
+                    for _w in set_result.warnings:
+                        st.session_state.setdefault("agent_notifications", []).append({
+                            "type": "warning",
+                            "text": f"📋 PLAN — {_w}",
+                            "timestamp": _dt.now().strftime("%H:%M:%S"),
+                        })
+
+                    new_playlist = []
+                    pq = _get_pq()
+                    _existing_max_tid = max(
+                        (p.get("tanda_id", -1) for p in pq.items if p.get("type") == "song"),
+                        default=-1,
+                    )
+                    _tanda_id_offset = _existing_max_tid + 1
+
+                    # Iterate slots in strict schema order.
+                    # Use schema style as authoritative (not track catalog value)
+                    # so the playlist order always matches [tango,tango,vals,tango,tango,milonga].
+                    for slot_idx, slot in enumerate(set_result.slots):
+                        if not slot.tanda:
+                            continue  # failed slot — skip, warning already logged above
+                        tanda_tracks = slot.tanda
+                        # Schema style is the source of truth for display and tanda_id
+                        style_for_tanda = set_result.set_schema[slot_idx].upper()
+
+                        for i, track in enumerate(tanda_tracks):
+                            new_playlist.append({
+                                "type":      "song",
+                                "title":     track.get("title", "Unknown"),
+                                "playing":   slot_idx == 0 and i == 0,
+                                "style":     style_for_tanda,  # always from schema, never from catalog
+                                "orchestra": track.get("orchestra", ""),
+                                "singer":    track.get("singer", "") if str(track.get("singer", "")) != "nan" else "",
+                                "year":      int(track.get("year", 0)) if track.get("year") and str(track.get("year")) != "nan" else 0,
+                                "duration":  str(int(track.get("duration_seconds", 0) // 60)) + ":" +
+                                             str(int(track.get("duration_seconds", 0) % 60)).zfill(2),
+                                "energy":    track.get("energy"),
+                                "source":    "agent",
+                                "tanda_id":  _tanda_id_offset + slot_idx,
+                            })
+
+                        next_style = (
+                            set_result.set_schema[slot_idx + 1]
+                            if slot_idx + 1 < len(set_result.set_schema) else None
+                        )
+                        _cor = _pick_cortina(tanda_tracks, next_style)
+                        new_playlist.append({
+                            "type":      "cortina",
+                            "title":     _cor.get("title", "Cortina"),
+                            "file_path": _cor.get("file_path"),
+                            "duration":  _cor.get("duration", "0:20"),
+                            "source":    _cor.get("source", "agent"),
+                        })
+
+                # ── Single-tanda path: existing LangGraph agent ────────────────
                 else:
                     detected_style = "tango"
                     for s in ["vals", "milonga", "tango"]:
@@ -607,155 +792,107 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                             break
                     session_plan = [(msg_text.strip(), detected_style)]
 
-                session = PlanSession(
-                    id=str(uuid.uuid4()),
-                    name=msg_text.strip()[:50],
-                )
-                graph = build_graph()
-                initial_state = {
-                    "messages": [], "session": session,
-                    "current_tanda_index": 0, "upcoming_tandas": [], "pending_feedback": [],
-                    "needs_cortina": False, "session_complete": False, "feedback_pending": False,
-                    "candidate_tracks": [], "current_tanda_draft": None, "last_agent_action": None,
-                    "qa_question": None, "qa_answer": None, "error_message": None, "retry_count": 0,
-                    "agent_log": [], "activity_log": [],
-                    "selected_cortinas": [],
-                    "session_plan": session_plan,
-                    "picked_tracks": [],
-                }
-                final_state = graph.invoke(initial_state)
-
-                # Hand the per-node log entries off to the Session Log panel.
-                for entry in final_state.get("activity_log", []):
-                    st.session_state.setdefault("activity_log", []).append(entry)
-
-                new_playlist = []
-                picked_per_tanda = final_state.get("picked_tracks") or []
-                # Load pq up front so the cortina-title resolver below can use it.
-                pq = _get_pq()
-                # Offset tanda_id by the max already in the playlist so each PLAN run
-                # gets globally unique ids. Without this, every plan restarts at 0 and
-                # `next_tanda` audio adjustments collapse all songs with the same
-                # per-plan index across every plan into one giant target set.
-                _existing_max_tid = max(
-                    (p.get("tanda_id", -1) for p in pq.items if p.get("type") == "song"),
-                    default=-1,
-                )
-                _tanda_id_offset = _existing_max_tid + 1
-                for tanda_idx, tanda_tracks in enumerate(picked_per_tanda):
-                    if not tanda_tracks:
-                        continue
-                    style_for_tanda = (
-                        session_plan[tanda_idx][1] if tanda_idx < len(session_plan) else "tango"
+                    session = PlanSession(
+                        id=str(uuid.uuid4()),
+                        name=msg_text.strip()[:50],
                     )
-                    for i, track in enumerate(tanda_tracks):
-                        new_playlist.append({
-                            "type": "song",
-                            "title": track.get("title", "Unknown"),
-                            "playing": tanda_idx == 0 and i == 0,
-                            "style": str(track.get("style", style_for_tanda)).upper(),
-                            "orchestra": track.get("orchestra", ""),
-                            "singer": track.get("singer", "") if str(track.get("singer", "")) != "nan" else "",
-                            "year": int(track.get("year", 0)) if track.get("year") and str(track.get("year")) != "nan" else 0,
-                            "duration": str(int(track.get("duration_seconds", 0) // 60)) + ":" +
-                                    str(int(track.get("duration_seconds", 0) % 60)).zfill(2),
-                            "energy": track.get("energy"),
-                            "source": "agent",
-                            "tanda_id": _tanda_id_offset + tanda_idx,
-                        })
-                    if tanda_idx < len(picked_per_tanda) - 1:
-                        # 2026-05-01: read the agent's actual cortina selection from
-                        # state["selected_cortinas"] (one entry per cortina_selector
-                        # call, in order). The selection algorithm in
-                        # atdj/agent/nodes.py:cortina_selector currently returns the
-                        # placeholder `default_cortina` because the song catalog CSV
-                        # has no cortina rows — that gets a separate tune later.
-                        # For now: take the agent's title, then run it through the
-                        # PlaybackQueue resolver to get the file the player will
-                        # actually serve. Use that file's stem as the displayed
-                        # title so display == playback (no silent mismatch).
-                        _agent_cortinas = final_state.get("selected_cortinas") or []
-                        if tanda_idx < len(_agent_cortinas):
-                            _cor = _agent_cortinas[tanda_idx]
-                            _agent_title = _cor.get("title") or _cor.get("filename") or "Cortina"
-                        else:
-                            _agent_title = "Cortina"
-                        _resolved_path = pq.resolve_file_path({"type": "cortina", "title": _agent_title})
-                        _cortina_title = _Path(_resolved_path).stem if _resolved_path else _agent_title
-                        new_playlist.append({
-                            "type": "cortina", "title": _cortina_title,
-                            "duration": "0:20", "source": "agent",
-                        })
+                    graph = build_graph()
+                    initial_state = {
+                        "messages": [], "session": session,
+                        "current_tanda_index": 0, "upcoming_tandas": [], "pending_feedback": [],
+                        "needs_cortina": False, "session_complete": False, "feedback_pending": False,
+                        "candidate_tracks": [], "current_tanda_draft": None, "last_agent_action": None,
+                        "qa_question": None, "qa_answer": None, "error_message": None, "retry_count": 0,
+                        "agent_log": [], "activity_log": [],
+                        "selected_cortinas": [],
+                        "session_plan": session_plan,
+                        "picked_tracks": [],
+                    }
+                    final_state = graph.invoke(initial_state)
 
-                if new_playlist and not is_full_session:
-                    # Generate a closing cortina for single-tanda plans
-                    from atdj.config import get_ui_api_key, get_ui_provider, GEMINI_API_KEY
-                    from atdj.cortina.generator import _summarize_tanda
-                    from atdj.cortina.pool import find_best_cortina
-                    from datetime import datetime as _dt
-                    _provider = get_ui_provider()
-                    _api_key = (get_ui_api_key() if _provider == "Gemini" else "") or GEMINI_API_KEY
-                    if picked_per_tanda:
-                        if _api_key:
-                            try:
-                                from atdj.cortina.generator import generate_cortina
-                                from atdj.config import ROOT_DIR
-                                _cortina = generate_cortina(
-                                    prev_tracks=picked_per_tanda[0],
-                                    next_style=None,
-                                    output_dir=ROOT_DIR / "data" / "cortinas" / "generated",
-                                    api_key=_api_key,
-                                )
-                                new_playlist.append(_cortina)
-                                st.session_state.setdefault("agent_notifications", []).append({
-                                    "type": "info",
-                                    "text": f"🎵 CORTINA — Generated via Lyria ({_cortina.get('title', 'Cortina')})",
-                                    "timestamp": _dt.now().strftime("%H:%M:%S"),
-                                })
-                            except Exception as _e:
-                                # Lyria failed — fall back to pool
-                                _summary = _summarize_tanda(picked_per_tanda[0])
-                                _cortina = find_best_cortina(_summary)
-                                new_playlist.append(_cortina)
-                                st.session_state.setdefault("agent_notifications", []).append({
-                                    "type": "warning",
-                                    "text": f"🎵 CORTINA — Lyria failed, using pool ({_cortina.get('title', 'Cortina')})",
-                                    "timestamp": _dt.now().strftime("%H:%M:%S"),
-                                })
+                    for entry in final_state.get("activity_log", []):
+                        st.session_state.setdefault("activity_log", []).append(entry)
+
+                    new_playlist = []
+                    picked_per_tanda = final_state.get("picked_tracks") or []
+                    pq = _get_pq()
+                    _existing_max_tid = max(
+                        (p.get("tanda_id", -1) for p in pq.items if p.get("type") == "song"),
+                        default=-1,
+                    )
+                    _tanda_id_offset = _existing_max_tid + 1
+                    for tanda_idx, tanda_tracks in enumerate(picked_per_tanda):
+                        if not tanda_tracks:
+                            continue
+                        style_for_tanda = (
+                            session_plan[tanda_idx][1] if tanda_idx < len(session_plan) else "tango"
+                        ).upper()
+                        for i, track in enumerate(tanda_tracks):
+                            new_playlist.append({
+                                "type":      "song",
+                                "title":     track.get("title", "Unknown"),
+                                "playing":   tanda_idx == 0 and i == 0,
+                                "style":     style_for_tanda,  # always from schema
+                                "orchestra": track.get("orchestra", ""),
+                                "singer":    track.get("singer", "") if str(track.get("singer", "")) != "nan" else "",
+                                "year":      int(track.get("year", 0)) if track.get("year") and str(track.get("year")) != "nan" else 0,
+                                "duration":  str(int(track.get("duration_seconds", 0) // 60)) + ":" +
+                                             str(int(track.get("duration_seconds", 0) % 60)).zfill(2),
+                                "energy":    track.get("energy"),
+                                "source":    "agent",
+                                "tanda_id":  _tanda_id_offset + tanda_idx,
+                            })
+                        if tanda_idx < len(picked_per_tanda) - 1:
+                            _agent_cortinas = final_state.get("selected_cortinas") or []
+                            if tanda_idx < len(_agent_cortinas):
+                                _cor = _agent_cortinas[tanda_idx]
+                                _agent_title = _cor.get("title") or _cor.get("filename") or "Cortina"
+                            else:
+                                _agent_title = "Cortina"
+                            _resolved_path = pq.resolve_file_path({"type": "cortina", "title": _agent_title})
+                            _cortina_title = _Path(_resolved_path).stem if _resolved_path else _agent_title
+                            new_playlist.append({
+                                "type": "cortina", "title": _cortina_title,
+                                "duration": "0:20", "source": "agent",
+                            })
                         else:
-                            # No Gemini key — use pool directly
-                            _summary = _summarize_tanda(picked_per_tanda[0])
-                            _cortina = find_best_cortina(_summary)
-                            new_playlist.append(_cortina)
-                            st.session_state.setdefault("agent_notifications", []).append({
-                                "type": "info",
-                                "text": f"🎵 CORTINA — Selected from pool ({_cortina.get('title', 'Cortina')})",
-                                "timestamp": _dt.now().strftime("%H:%M:%S"),
+                            _cor = _pick_cortina(tanda_tracks, next_style=None)
+                            new_playlist.append({
+                                "type":      "cortina",
+                                "title":     _cor.get("title", "Cortina"),
+                                "file_path": _cor.get("file_path"),
+                                "duration":  _cor.get("duration", "0:20"),
+                                "source":    _cor.get("source", "agent"),
                             })
 
                 if new_playlist:
-                    # Append to the existing queue instead of overwriting it,
-                    # so successive plans stack rather than replacing the previous tanda.
                     pq = _get_pq()
                     pq.items.extend(new_playlist)
                     _save_pq(pq)
-
-                    # 2026-05-01: removed the auto-enhance-on-PLAN hook + Quality
-                    # Enhance toggle. Audio enhancement now ONLY fires from the chat
-                    # path (atdj/audio/adjustment_graph.py).
 
                 songs = [t for t in new_playlist if t["type"] == "song"]
                 if songs:
                     orchestras = list(dict.fromkeys([s["orchestra"] for s in songs if s.get("orchestra")]))
                     styles = list(dict.fromkeys([s["style"] for s in songs if s.get("style")]))
+                    n_tandas = len(set(s.get("tanda_id", 0) for s in songs))
+                    n_cortinas = len([t for t in new_playlist if t["type"] == "cortina"])
                     summary = (
-                        f"✅ Done! I've planned **{len(songs)} tracks**.\n\n"
+                        f"✅ Done! I've planned **{len(songs)} tracks** across "
+                        f"**{n_tandas} tanda{'s' if n_tandas != 1 else ''}** "
+                        f"with **{n_cortinas} cortina{'s' if n_cortinas != 1 else ''}**.\n\n"
                         f"**Orchestras:** {', '.join(orchestras[:4])}\n\n"
                         f"**Styles:** {', '.join(styles)}\n\n"
                         f"Check the **Full Playlist** on the left!"
                     )
                 else:
                     summary = "⚠️ Couldn't find enough tracks. Try a different prompt!"
+
+            except Exception as _plan_err:
+                summary = (
+                    f"⚠️ Planning failed: `{_plan_err}`\n\n"
+                    f"Check the terminal for the full traceback. "
+                    f"Verify your API key in Settings and try again."
+                )
 
             _reply_slot.markdown(summary)
             st.session_state["chat_msgs"].append({"role": "assistant", "content": summary})
@@ -1260,8 +1397,16 @@ def _section_music():
                         st.session_state["playback_initiated"] = True
                         st.rerun()
                 with gap_bar_col:
+                    _gap_bar_gap_ms = int(st.session_state.get("song_gap", 10)) * 1000
+                    _gap_bar_cor_s  = int(st.session_state.get("cortina_len", 30))
                     _gap_bar_html = f"""
                     <span style="display:none">track:{pq.current_index}</span>
+                    <script>
+                      try {{ window.top.__atdjGapMs = {_gap_bar_gap_ms}; }} catch (e) {{}}
+                      try {{ window.top.__atdjCortinaSec = {_gap_bar_cor_s}; }} catch (e) {{}}
+                      try {{ window.parent.__atdjGapMs = {_gap_bar_gap_ms}; }} catch (e) {{}}
+                      try {{ window.parent.__atdjCortinaSec = {_gap_bar_cor_s}; }} catch (e) {{}}
+                    </script>
                     <style>
                       * {{ margin:0; padding:0; box-sizing:border-box; }}
                       html, body {{ height:100%; }}

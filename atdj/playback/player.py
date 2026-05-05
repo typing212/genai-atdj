@@ -57,6 +57,14 @@ class PlaybackQueue:
     def skip(self) -> dict | None:
         return self.next_track()
 
+    def jump_to(self, index: int) -> dict | None:
+        """Jump the cursor directly to any index in the playlist."""
+        if not self._items or index < 0 or index >= len(self._items):
+            return None
+        self._current_index = index
+        self._is_playing = True
+        return self.current_track()
+
     def stop(self) -> None:
         self._is_playing = False
 
@@ -111,12 +119,22 @@ class PlaybackQueue:
         return str(path) if path.exists() else None
 
     def _resolve_cortina(self, item: dict) -> str | None:
-        if item.get("file_path") and Path(item["file_path"]).exists():
-            return item["file_path"]
+        # 1. Honour an explicit file_path stored by pool.py / generator.py.
+        stored = item.get("file_path")
+        if stored and Path(stored).exists():
+            return stored
+
+        # 2. Fuzzy title-match across CORTINAS_DIR and all subdirectories
+        #    (covers pool/, generated/, and top-level cortina files).
         cortinas_path = Path(CORTINAS_DIR)
         if not cortinas_path.exists():
             return None
-        files = list(cortinas_path.glob("*.mp3")) + list(cortinas_path.glob("*.wav"))
+        files = (
+            list(cortinas_path.glob("*.mp3")) + list(cortinas_path.glob("*.wav")) +
+            list(cortinas_path.glob("**/*.mp3")) + list(cortinas_path.glob("**/*.wav"))
+        )
+        seen: set[str] = set()
+        files = [f for f in files if not (str(f) in seen or seen.add(str(f)))]
         if not files:
             return None
         title_lower = item.get("title", "").lower()
@@ -178,20 +196,6 @@ class PlaybackQueue:
         elif index == self._current_index:
             if self._current_index >= len(self._items):
                 self._current_index = max(0, len(self._items) - 1)
-        return True
-
-    def clear(self) -> None:
-        # Reset cursor and playback flag too — otherwise a stale _current_index
-        # left over from earlier playback can survive the wipe and point past the
-        # end of any subsequently-appended tracks, leaving Now Playing empty.
-        self._items = []
-        self._current_index = 0
-        self._is_playing = False
-
-    def jump_to(self, index: int) -> bool:
-        if index < 0 or index >= len(self._items):
-            return False
-        self._current_index = index
         return True
 
     def to_session_state(self) -> dict:

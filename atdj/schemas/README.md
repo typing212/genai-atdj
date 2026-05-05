@@ -1,19 +1,19 @@
 # Schema Design — AT-DJ
 
-All schemas live in `atdj/schemas/` and are built with **Pydantic v2**. They act as shared data contracts across all modules (audio extraction, agent planner, UI, RAG). Any module that creates or receives structured data must use these models — this prevents integration bugs and ensures type safety without extra validation code.
+All schemas live in `atdj/schemas/` and are built with **Pydantic v2**. They act as shared data contracts across modules (audio extraction, agent planner, UI, RAG). Any module that creates or receives structured data uses these models — this prevents integration bugs without scattering ad-hoc validation through the codebase.
 
 ---
 
 ## track.py — `Track`, `TangoStyle`, `AudioQuality`
 
-**What it represents:** A single audio file (tango, vals, milonga, or cortina) in the music pool.
+**What it represents:** a single audio file (tango, vals, milonga, or cortina) in the music pool.
 
 ### Enums
 
 | Enum | Values | Purpose |
 |---|---|---|
 | `TangoStyle` | `tango`, `vals`, `milonga`, `cortina` | Dance style or clip type |
-| `AudioQuality` | `raw`, `enhanced` | Whether the file has been denoised |
+| `AudioQuality` | `raw`, `enhanced` | Whether the file has been processed by the enhancement pipeline |
 
 ### Track fields
 
@@ -23,8 +23,8 @@ All schemas live in `atdj/schemas/` and are built with **Pydantic v2**. They act
 | `title` | str | required | ID3 tag |
 | `orchestra` | str | required | ID3 tag |
 | `singer` | str or None | optional | ID3 tag |
-| `style` | TangoStyle | required | inferred from filename/tag |
-| `year` | int | no range constraint | ID3 tag |
+| `style` | TangoStyle | required | inferred from filename / folder / tag |
+| `year` | int | required | ID3 tag |
 | `decade` | int | auto-derived from year | `field_validator` |
 | `duration_seconds` | float | > 0 | mutagen |
 | `file_path` | str | required | routing logic |
@@ -37,43 +37,43 @@ All schemas live in `atdj/schemas/` and are built with **Pydantic v2**. They act
 | `brightness` | float or None | optional | librosa |
 | `snr_estimate_db` | float or None | optional | audio analysis |
 | `embedding_id` | str or None | optional | ChromaDB |
-| `tags` | list[str] | default `[]` | user/agent |
-| `notes` | str or None | optional | user/agent |
+| `tags` | list[str] | default `[]` | user / agent |
+| `notes` | str or None | optional | user / agent |
 
-**Key behavior:** `decade` is always derived automatically from `year` via `field_validator` — you never need to pass it explicitly. Setting `model_config = {"use_enum_values": True}` stores enum values as plain strings (`"tango"` not `TangoStyle.TANGO`), which makes CSV/JSON serialization straightforward.
+**Key behaviour:** `decade` is always derived automatically from `year` via a `field_validator` — callers do not need to pass it explicitly. `model_config = {"use_enum_values": True}` stores enum values as plain strings (`"tango"` rather than `TangoStyle.TANGO`), which keeps CSV and JSON serialization clean.
 
 ---
 
 ## tanda.py — `Tanda`
 
-**What it represents:** A group of 3–4 tracks played together without interruption, sharing the same orchestra, style, and era.
+**What it represents:** a group of 3–4 tracks played together without interruption. By tango convention these would also share an orchestra, an era, and ideally a singer; the schema enforces only style.
 
 ### Fields
 
-| Field | Type | Constraint | Notes |
-|---|---|---|---|
-| `id` | str | required | |
-| `tracks` | list[Track] | 3–4 items | enforced by `min_length`/`max_length` |
-| `style` | TangoStyle | required | must match all tracks |
-| `orchestra` | str | required | must match all tracks |
-| `era_decade` | int | required | e.g. 1940 |
-| `total_duration_seconds` | float | auto-computed | sum of track durations |
-| `energy_level` | float | 0.0–1.0 | agent-assigned |
-| `position_in_session` | int or None | optional | set during planning |
-| `generated_by` | str | default `"agent"` | audit trail |
-| `rationale` | str or None | optional | agent explanation |
+| Field | Type | Constraint |
+|---|---|---|
+| `id` | str | required |
+| `tracks` | list[Track] | 3–4 items |
+| `style` | TangoStyle | required |
+| `orchestra` | str | required |
+| `era_decade` | int | required (e.g. 1940) |
+| `total_duration_seconds` | float | auto-computed from tracks |
+| `energy_level` | float | 0.0–1.0 |
+| `position_in_session` | int or None | optional |
+| `generated_by` | str | default `"agent"` |
+| `rationale` | str or None | optional agent explanation |
 
-**Key behavior:** `model_validator(mode="after")` enforces **style homogeneity only** — all tracks must share one style (tango/vals/milonga/cortina). `total_duration_seconds` is also computed here. Orchestra, singer, and decade homogeneity are **soft rules** enforced by the planner layer (`atdj/planner/tanda_rules.py`, WP-05) based on `MilongaSession.planning_mode` — they are not validated here so mixed-orchestra or cross-decade tandas can be created when the agent justifies them.
+**Key behaviour:** the `validate_homogeneity` model validator enforces only **style** homogeneity — every track in the tanda must share one style (no mixing tango with vals, etc.). The same validator computes `total_duration_seconds`. Orchestra, singer, and decade homogeneity are deliberately left as soft rules — the planner layer is the right place to enforce them, and a deferred "convention vs flexible" planning mode (see `doc/future_work.md` §4) would let the agent break those soft rules when it can justify the break.
 
 ---
 
-## session.py — `Cortina`, `QueueItem`, `MilongaSession`
+## session.py — `Cortina`, `QueueItem`, `PlanSession`
 
-**What it represents:** The live playback state of an entire milonga evening.
+**What it represents:** the session-level wrappers used during agent planning. `PlanSession` was renamed from the original `MilongaSession` and slimmed down significantly — it no longer carries playback or planning-target state, only an identity for one agent run.
 
 ### Cortina
 
-Short music clip (10–35 seconds) played between tandas to signal a partner change.
+A short music clip played between tandas to signal a partner change.
 
 | Field | Type | Constraint |
 |---|---|---|
@@ -86,7 +86,7 @@ Short music clip (10–35 seconds) played between tandas to signal a partner cha
 
 ### QueueItem
 
-One slot in the session playlist — either a Tanda or a Cortina.
+One slot in a session playlist — either a Tanda or a Cortina.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -96,57 +96,50 @@ One slot in the session playlist — either a Tanda or a Cortina.
 | `played` | bool | default False |
 | `played_at` | datetime or None | set when played |
 
-### MilongaSession
+### PlanSession
 
-The top-level session object holding all planning state.
+The lightweight session identity attached to a single PLAN chat request as it flows through the LangGraph.
 
-| Field | Default | Notes |
+| Field | Type | Notes |
 |---|---|---|
-| `target_duration_minutes` | 180 | 60–300 min allowed |
-| `styles_ratio` | `{tango:0.70, vals:0.20, milonga:0.10}` | DJ preference |
-| `avoid_repeat_orchestra_within` | 3 | tanda spacing rule |
-| `planning_mode` | `"convention"` or `"flexible"` | default `"convention"` | controls planner strictness |
-| `energy_arc` | `[]` | planned energy curve |
-| `actual_energies` | `[]` | recorded as session runs |
+| `id` | str | required |
+| `name` | str | required (typically derived from the user's PLAN prompt) |
 
-**`planning_mode` behavior (enforced by planner layer in WP-05, not Pydantic):**
-- **`convention`** — orchestra, singer, and decade must all match within a tanda (hard error if not)
-- **`flexible`** — mismatches allowed if the agent provides a non-empty `rationale` on the `Tanda`; no rationale = blocked
-- Style (tango/vals/milonga) is always hard — enforced by Pydantic regardless of mode
+**Key behaviour:** `PlanSession` represents one agent planning run, not the user-facing milonga session shown in the sidebar. The original `MilongaSession` carried playback state (target duration, styles ratio, energy arc, etc.) but those concerns now live elsewhere — the playlist is owned by the playback engine, the energy arc is rendered directly from selected-track energies, and styles ratio was never wired to anything.
 
 ---
 
 ## feedback.py — `FeedbackEvent`
 
-**What it represents:** A real-time signal from a human operator (DJ, host, or organizer) during the milonga that the agent should act on.
+**What it represents:** a real-time signal from a human operator (DJ, host, organizer) during the milonga that the agent should act on.
 
 ### Fields
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | str | required |
-| `session_id` | str | links to MilongaSession |
+| `session_id` | str | links to a PlanSession |
 | `timestamp` | datetime | when the event occurred |
 | `event_type` | Literal (see below) | strictly enumerated |
 | `payload` | dict | optional extra data |
-| `processed` | bool | default False; agent sets True after acting |
+| `processed` | bool | default False; agent flips to True after acting |
 | `agent_response` | str or None | what the agent did |
 
 ### Allowed event_type values
 
 | Value | Meaning |
 |---|---|
-| `energy_up` | Floor is warming up — increase energy |
+| `energy_up` | Floor warming up — increase energy |
 | `energy_down` | Floor tiring — decrease energy |
 | `skip_tanda` | Skip the current tanda |
 | `repeat_orchestra` | Play this orchestra again soon |
 | `avoid_orchestra` | Do not schedule this orchestra again |
 | `floor_full` | Peak crowd — maintain high energy |
 | `floor_empty` | Crowd thinning — wind down |
-| `qa_query` | DJ asked a question about tango history/style |
+| `qa_query` | DJ asked a question about tango history or style |
 | `manual_override` | DJ manually changed something |
 
-**Key behavior:** `event_type` uses `Literal[...]` — any string not in this list raises a `ValidationError` immediately. `processed` defaults to `False` and is flipped by the agent after it handles the event.
+**Key behaviour:** `event_type` uses `Literal[...]` — any string outside this list raises a `ValidationError` immediately. Today the schema is wired into the agent graph but no UI surface produces events; see `doc/future_work.md` §2 (Feedback Interrupt) for the v2 roadmap that activates this loop.
 
 ---
 
@@ -156,11 +149,15 @@ The top-level session object holding all planning state.
 atdj/schemas/
 ├── track.py        → Track, TangoStyle, AudioQuality
 ├── tanda.py        → Tanda           (imports Track, TangoStyle)
-├── session.py      → Cortina, QueueItem, MilongaSession  (imports Tanda)
+├── session.py      → Cortina, QueueItem, PlanSession  (imports Tanda)
 └── feedback.py     → FeedbackEvent
 ```
 
-All four files are re-exported from `atdj/schemas/__init__.py` so other modules can do:
+`atdj/schemas/__init__.py` is empty — there is no top-level re-export. Import each model from its own module:
+
 ```python
-from atdj.schemas import Track, Tanda, MilongaSession, FeedbackEvent
+from atdj.schemas.track import Track, TangoStyle, AudioQuality
+from atdj.schemas.tanda import Tanda
+from atdj.schemas.session import PlanSession, Cortina, QueueItem
+from atdj.schemas.feedback import FeedbackEvent
 ```

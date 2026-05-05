@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, Union, Literal
+from typing import Optional, Union
 from datetime import datetime
 from atdj.schemas.tanda import Tanda
 
@@ -26,4 +26,3 @@ class PlanSession(BaseModel):
     Not to be confused with the user-facing milonga session in the sidebar."""
     id: str
     name: str
-    planning_mode: Literal["convention", "flexible"] = "convention"

@@ -26,7 +26,7 @@ from atdj.audio.enhancement import (
 )
 from atdj.config import PROCESSED_DIR, get_ui_llm
 
-# ── Constants ─────────────────────────────────────────────────────────────────
+# Constants
 
 FEATURE_PARAM = {
     "loudness": "target_lufs",
@@ -82,6 +82,8 @@ Scope keywords:
 - rest      : "following", "rest", "everything after", "from here on", "all after"
 - specific  : user names an orchestra, style, or song title
 
+IMPORTANT — when the user mentions both the current song AND another scope (e.g. "this song is harsh, fix the next tanda" or "the current track sounds bad, can we improve the rest"), pick the SCOPE attached to the action verb ("fix", "improve", "make", "apply"), not the one they used as descriptive context. In both examples the correct answer is `next_tanda` / `rest`, not `current`. The current song mention is just the user describing what made them notice the problem.
+
 Reset keywords (direction="reset", feature and magnitude are ignored):
 - "back to default", "use original", "undo", "revert", "reset", "restore",
   "remove my changes", "go back to normal", "original version", "no enhancement"
@@ -99,16 +101,26 @@ Return a JSON object with exactly these fields (no markdown, no extra text):
   "clarification_question": "<question string or null>",
   "clarification_options": ["option1", "option2"] or []
 }}
+
+Rules for `clarification_options`:
+- Write user-facing labels in plain English. The user reads them as a numbered menu.
+- DO NOT include internal codes like "(up)", "(down)", "(rest)", "(loudness)", or any parenthesized direction/feature tags.
+- Good: "Make it louder", "Make it quieter", "More noise reduction", "Less noise reduction".
+- Bad:  "Increase loudness (up)", "Decrease loudness (down)", "Noise reduction up".
+- Maximum 4 options. Pick the 4 most likely interpretations — long menus (8+) overwhelm the user. If you can't narrow it down, ask a more focused `clarification_question`.
+
+Set `needs_clarification` to true ONLY when you genuinely cannot infer enough from the user message AND the playlist context to act. If the request is fully unambiguous, return false and leave `clarification_question`/`clarification_options` empty.
+
+If the user asks to change something that is NOT one of the supported features (loudness/bass/presence/noise/highpass/limiter) — e.g. "make it more sparkly", "add reverb", "speed it up" — set `feature` to null, `needs_clarification` to true, and use `clarification_question` to explain (briefly) which adjustments ARE supported, then offer the closest supported choices in `clarification_options`.
 """
 
 
-# ── State ─────────────────────────────────────────────────────────────────────
+# State
 
 class AdjustmentState(TypedDict):
     user_message: str
     playlist: list[dict]
     current_index: int
-    auto_enhance_on: bool
     output_dir: str
     resolved_paths: dict           # {playlist_index(int): raw_file_path_str}
 
@@ -129,18 +141,16 @@ class AdjustmentState(TypedDict):
     computed_overrides: list[dict]
     execution_results: list[dict]
 
-    store_intent: bool
-    intent_to_store: Optional[dict]
-
     reply: str
     activity_log: Annotated[list, operator.add]
+    # Routing signal set by resolve_pending_menu so the graph can branch on whether
+    # the user's reply mapped to an open menu option, cancelled it, or was off-topic.
+    resolution_outcome: Optional[str]
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def _log(node: str, level: str, message: str) -> dict:
+def _log(node: str, level: str, message: str, summary: bool = False) -> dict:
     return {"timestamp": datetime.now().isoformat(), "node": node,
-            "level": level, "message": message}
+            "level": level, "message": message, "summary": summary}
 
 
 def _playlist_summary(playlist: list[dict], current_index: int) -> str:
@@ -172,7 +182,7 @@ def _get_llm():
     return get_ui_llm()
 
 
-# ── Pure helpers (exported for tests) ────────────────────────────────────────
+# Pure helpers (exported for tests)
 
 def apply_constraint(direction: str, ref_value: float, delta: float,
                      track_auto_value: float) -> float:
@@ -221,27 +231,177 @@ def resolve_targets(scope: str, playlist: list[dict], current_index: int,
     return []
 
 
-def compute_intent_overrides(intent: dict, track_count: int) -> list[dict]:
-    """Compute per-track overrides from a stored intent using DEFAULT_PARAMS as reference.
+# Menu-pick resolver
+# Without this layer, a reply like "1" or "cancel" goes straight into parse_request
+# and the LLM treats it as a fresh ambiguous message. The resolver maps menu picks
+# heuristically (cheap, no extra LLM call) so the graph can carry forward the prior
+# turn's intent (rejection menu) or feed clean text into parse_request (clarification).
 
-    Used by the PLAN handler to apply a persisted intent to a freshly planned session.
-    """
-    feature = intent.get("feature")
-    direction = intent.get("direction")
-    magnitude = intent.get("magnitude", "small")
-    if not feature or not direction or direction == "reset":
-        return [{} for _ in range(track_count)]
-    param_key = FEATURE_PARAM.get(feature)
-    if not param_key:
-        return [{} for _ in range(track_count)]
-    ref_value = DEFAULT_PARAMS[param_key]
-    delta = MAGNITUDE_DELTA[feature][magnitude]
-    requested_target = ref_value + delta * (1 if direction == "up" else -1)
-    override = {param_key: requested_target}
-    return [override for _ in range(track_count)]
+_WORD_TO_NUM = {
+    "first": 0, "second": 1, "third": 2, "fourth": 3, "fifth": 4,
+    "sixth": 5, "seventh": 6, "eighth": 7, "ninth": 8,
+    "1st": 0, "2nd": 1, "3rd": 2, "4th": 3, "5th": 4,
+}
 
 
-# ── Nodes ─────────────────────────────────────────────────────────────────────
+def _match_option(msg: str, options: list[str]) -> Optional[str]:
+    """Try to map a user reply to one of the menu options.
+    Returns the matched option text, or None for no clear match."""
+    if not options:
+        return None
+    msg_clean = msg.strip().lower().rstrip(".!?,)")
+
+    # 1. Numeric: "1", "1.", "1)", "(1)"
+    num_match = re.match(r"^\(?([1-9])\)?[\.\)]?\s*$", msg_clean)
+    if num_match:
+        idx = int(num_match.group(1)) - 1
+        if 0 <= idx < len(options):
+            return options[idx]
+
+    # 2. Word number: "first", "second", ... possibly with "the " or "option " prefix
+    stripped = re.sub(r"^(?:the\s+|option\s+)", "", msg_clean).strip()
+    if stripped in _WORD_TO_NUM:
+        idx = _WORD_TO_NUM[stripped]
+        if 0 <= idx < len(options):
+            return options[idx]
+
+    # 3. Exact label match (case-insensitive)
+    for opt in options:
+        if opt.lower() == msg_clean:
+            return opt
+
+    # 4. Substring match (option text contained in user reply, or vice versa for short user replies).
+    #    Match the LONGEST containing-pair to avoid "rest" matching every option that has the word "rest".
+    best = None
+    best_score = 0
+    for opt in options:
+        opt_lower = opt.lower()
+        if opt_lower in msg_clean or msg_clean in opt_lower:
+            score = min(len(opt_lower), len(msg_clean))
+            if score > best_score:
+                best = opt
+                best_score = score
+    return best
+
+
+def resolve_pending_menu(state: AdjustmentState) -> dict:
+    """Entry node. If a clarification or rejection menu is open from the prior
+    turn, try to resolve the user's new reply to one of the offered options
+    BEFORE falling through to parse_request. Sets `resolution_outcome` for routing."""
+    msg = state.get("user_message", "") or ""
+    rejection_opts = state.get("rejection_options") or []
+    clarif_opts = state.get("clarification_options") or []
+
+    # ── Case 1: a current-song rejection menu was emitted last turn ──
+    if rejection_opts:
+        chosen = _match_option(msg, rejection_opts)
+        # Fallback: bare keyword "cancel" anywhere in a short reply
+        if chosen is None and re.search(r"\bcancel\b|\bnever\s*mind\b|\bnope\b", msg.lower()):
+            chosen = next((o for o in rejection_opts if "cancel" in o.lower()), None)
+        if chosen:
+            base = {
+                "rejected": False,
+                "rejection_options": [],
+                "needs_clarification": False,
+                "clarification_options": [],
+                "clarification_question": "",
+            }
+            chosen_lower = chosen.lower()
+            if "cancel" in chosen_lower:
+                return {
+                    **base,
+                    "resolution_outcome": "cancelled",
+                    "reply": "Okay — no adjustment applied.",
+                    "activity_log": [
+                        _log("resolve_pending_menu", "info",
+                             f"User cancelled rejection menu (reply: {msg!r})"),
+                        _log("resolve_pending_menu", "info",
+                             "Cancelled — no adjustment applied", summary=True),
+                    ],
+                }
+            if "all songs after" in chosen_lower or "rest" in chosen_lower:
+                return {
+                    **base,
+                    "resolution_outcome": "scope_resolved",
+                    "scope": "rest",
+                    "activity_log": [_log("resolve_pending_menu", "info",
+                        f"Resolved rejection menu pick → scope=rest "
+                        f"(carrying forward feature={state.get('feature')!r}, "
+                        f"direction={state.get('direction')!r})")],
+                }
+            if "next tanda" in chosen_lower or "next set" in chosen_lower:
+                return {
+                    **base,
+                    "resolution_outcome": "scope_resolved",
+                    "scope": "next_tanda",
+                    "activity_log": [_log("resolve_pending_menu", "info",
+                        f"Resolved rejection menu pick → scope=next_tanda "
+                        f"(carrying forward feature={state.get('feature')!r}, "
+                        f"direction={state.get('direction')!r})")],
+                }
+            if "next song" in chosen_lower or "next track" in chosen_lower:
+                return {
+                    **base,
+                    "resolution_outcome": "scope_resolved",
+                    "scope": "next_song",
+                    "activity_log": [_log("resolve_pending_menu", "info",
+                        "Resolved rejection menu pick → scope=next_song")],
+                }
+
+        # No match: clear the menu + stale SCOPE (the rejection menu was opened
+        # because scope=current was wrong, so the new reply is almost certainly
+        # a scope correction). KEEP feature/direction/magnitude — those were
+        # validly pinned in earlier turns and dropping them forces the user to
+        # re-specify the change every time they tweak scope.
+        return {
+            "resolution_outcome": "no_menu_match",
+            "rejected": False,
+            "rejection_options": [],
+            "scope": None,
+            "target_name": None,
+            "activity_log": [_log("resolve_pending_menu", "info",
+                "Rejection menu open but reply didn't match any option — clearing scope only "
+                "(keeping feature/direction/magnitude) and falling through to parse_request")],
+        }
+
+    # ── Case 2: a clarification menu was emitted last turn ──
+    if clarif_opts:
+        chosen = _match_option(msg, clarif_opts)
+        if chosen:
+            return {
+                "user_message": chosen,
+                "needs_clarification": False,
+                "clarification_options": [],
+                "clarification_question": "",
+                "resolution_outcome": "clarif_resolved",
+                "activity_log": [_log("resolve_pending_menu", "info",
+                    f"Resolved clarification reply {msg!r} → {chosen!r} (rewriting user_message)")],
+            }
+        # Off-topic during a clarification: clear the menu + stale scope; keep
+        # feature/direction/magnitude (same reasoning as the rejection-no-match
+        # branch above — don't make the user re-pin already-resolved intent).
+        return {
+            "resolution_outcome": "no_menu_match",
+            "needs_clarification": False,
+            "clarification_options": [],
+            "clarification_question": "",
+            "scope": None,
+            "target_name": None,
+            "activity_log": [_log("resolve_pending_menu", "info",
+                "Clarification open but reply didn't match — clearing scope only "
+                "and falling through to parse_request")],
+        }
+
+    # No menu was open
+    return {"resolution_outcome": "no_menu"}
+
+
+def emit_cancel(state: AdjustmentState) -> dict:
+    """Terminal node when the user cancelled an open rejection/clarification."""
+    return {"reply": state.get("reply") or "Okay — no adjustment applied."}
+
+
+# Nodes
 
 def parse_request(state: AdjustmentState) -> dict:
     summary = _playlist_summary(state["playlist"], state["current_index"])
@@ -265,18 +425,40 @@ def parse_request(state: AdjustmentState) -> dict:
                     "activity_log": [_log("parse_request", "warning", "JSON parse failed after 3 attempts")],
                 }
 
+    # 2026-05-01: when a clarification reply only fills in PART of the slots
+    # (e.g. user replies "Too loud" — gives feature/direction but no scope),
+    # don't blow away prior state. Fall back to the previous turn's value when
+    # the LLM returns null for a given field.
+    merged_scope     = parsed.get("scope")     or state.get("scope")
+    merged_feature   = parsed.get("feature")   or state.get("feature")
+    merged_direction = parsed.get("direction") or state.get("direction")
+    merged_magnitude = parsed.get("magnitude") or state.get("magnitude")
+    merged_target    = parsed.get("target_name") or state.get("target_name")
+
+    needs_clarif = bool(parsed.get("needs_clarification"))
+    # 2026-05-01: when the merged state already has every slot we need, override
+    # the LLM's needs_clarification=true. Otherwise the user picks a clarif
+    # option, the LLM sees only that option text (not the prior context),
+    # decides it's still ambiguous, and re-asks the same question forever.
+    enough_to_act = bool(merged_feature and merged_direction and merged_scope)
+    reset_only    = merged_direction == "reset" and bool(merged_scope)
+    if needs_clarif and (enough_to_act or reset_only):
+        needs_clarif = False
+
     return {
-        "scope": parsed.get("scope") or None,
-        "feature": parsed.get("feature") or None,
-        "direction": parsed.get("direction") or None,
-        "magnitude": parsed.get("magnitude") or None,
-        "target_name": parsed.get("target_name") or None,
-        "needs_clarification": bool(parsed.get("needs_clarification")),
-        "clarification_question": parsed.get("clarification_question") or "",
-        "clarification_options": parsed.get("clarification_options") or [],
+        "scope": merged_scope,
+        "feature": merged_feature,
+        "direction": merged_direction,
+        "magnitude": merged_magnitude,
+        "target_name": merged_target,
+        "needs_clarification": needs_clarif,
+        "clarification_question": "" if not needs_clarif else (parsed.get("clarification_question") or ""),
+        "clarification_options": [] if not needs_clarif else (parsed.get("clarification_options") or []),
         "activity_log": [_log("parse_request", "info",
                                f"Parsed: scope={parsed.get('scope')} feature={parsed.get('feature')} "
-                               f"direction={parsed.get('direction')} magnitude={parsed.get('magnitude')}")],
+                               f"direction={parsed.get('direction')} magnitude={parsed.get('magnitude')} "
+                               f"→ merged scope={merged_scope} feature={merged_feature} direction={merged_direction} "
+                               f"needs_clarif={needs_clarif}")],
     }
 
 
@@ -323,7 +505,13 @@ def resolve_targets_node(state: AdjustmentState) -> dict:
 def no_targets_node(state: AdjustmentState) -> dict:
     return {
         "reply": "No tracks found matching that description after the current position.",
-        "activity_log": [_log("resolve_targets", "warning", "No target tracks found")],
+        "activity_log": [
+            _log("resolve_targets", "warning", "No target tracks found"),
+            # 2026-05-01: surface the no-targets case on the on-screen Session Log too
+            _log("resolve_targets", "warning",
+                 "No tracks to adjust — nothing matched after the current position",
+                 summary=True),
+        ],
     }
 
 
@@ -418,14 +606,17 @@ def compute_adjustments(state: AdjustmentState) -> dict:
 
 
 def execute_enhancement(state: AdjustmentState) -> dict:
+    # 2026-05-01: Quality Enhance toggle removed. Audio enhancement only runs
+    # from the chat path now, so:
+    #   - reset always deletes the processed file (nothing else maintains one)
+    #   - we no longer store an "intent" to fold into a future PLAN (no PLAN hook)
     direction = state["direction"]
-    auto_enhance_on = state["auto_enhance_on"]
     target_indices = state["target_indices"]
     resolved_paths = state["resolved_paths"]
     overrides = state["computed_overrides"]
     output_dir = Path(state["output_dir"])
 
-    if direction == "reset" and not auto_enhance_on:
+    if direction == "reset":
         deleted = 0
         for i in target_indices:
             raw_path = resolved_paths.get(i)
@@ -437,10 +628,8 @@ def execute_enhancement(state: AdjustmentState) -> dict:
                     deleted += 1
         return {
             "execution_results": [{"deleted": deleted}],
-            "store_intent": False,
-            "intent_to_store": None,
             "activity_log": [_log("execute_enhancement", "info",
-                                   f"auto_enhance OFF + reset: deleted {deleted} processed files")],
+                                   f"reset: deleted {deleted} processed files")],
         }
 
     valid_paths = [
@@ -455,35 +644,21 @@ def execute_enhancement(state: AdjustmentState) -> dict:
     if not valid_paths:
         return {
             "execution_results": [],
-            "store_intent": False,
-            "intent_to_store": None,
             "reply": "No audio files found for the target tracks — they may not be in your local library.",
             "activity_log": [_log("execute_enhancement", "warning", "No valid file paths found for target tracks")],
         }
 
     try:
-        results = enhance_tanda(
-            valid_paths, output_dir,
-            param_overrides=valid_overrides if direction != "reset" else None,
-        )
+        results = enhance_tanda(valid_paths, output_dir, param_overrides=valid_overrides)
     except Exception as e:
         return {
             "execution_results": [],
-            "store_intent": False,
-            "intent_to_store": None,
             "reply": f"Enhancement failed: {e}",
             "activity_log": [_log("execute_enhancement", "error", str(e))],
         }
 
-    should_store = auto_enhance_on and direction != "reset"
     return {
         "execution_results": results,
-        "store_intent": should_store,
-        "intent_to_store": {
-            "feature": state.get("feature"),
-            "direction": direction,
-            "magnitude": state.get("magnitude", "small"),
-        } if should_store else None,
         "activity_log": [_log("execute_enhancement", "info",
                                f"Enhanced {len(results)} tracks successfully")],
     }
@@ -503,7 +678,13 @@ def format_reply(state: AdjustmentState) -> dict:
         deleted = results[0].get("deleted", 0) if results and "deleted" in results[0] else n
         return {
             "reply": f"Reverted {deleted if deleted else n} tracks to their default adaptive enhancement.",
-            "activity_log": [_log("format_reply", "info", "Formatted reset reply")],
+            "activity_log": [
+                _log("format_reply", "info", "Formatted reset reply"),
+                # 2026-05-01: summary entry for the on-screen Session Log
+                _log("format_reply", "info",
+                     f"Reset {deleted if deleted else n} track{'s' if (deleted if deleted else n) != 1 else ''} to default",
+                     summary=True),
+            ],
         }
 
     direction_word = "increased" if direction == "up" else "reduced"
@@ -525,13 +706,39 @@ def format_reply(state: AdjustmentState) -> dict:
     if state.get("store_intent"):
         reply += "\n\nThis preference will also apply to future session plans while Auto Enhance is on."
 
+    # 2026-05-01: build a concise on-screen summary line
+    summary_parts = []
+    if magnitude_label:
+        summary_parts.append(magnitude_label.capitalize())
+    summary_parts.append(direction_word)
+    summary_parts.append(feature_label)
+    summary_parts.append(f"for {n} track{'s' if n != 1 else ''}")
+    summary_msg = " ".join(summary_parts)
+
     return {
         "reply": reply,
-        "activity_log": [_log("format_reply", "info", f"Formatted reply for {n} tracks")],
+        "activity_log": [
+            _log("format_reply", "info", f"Formatted reply for {n} tracks"),
+            # On-screen summary entry
+            _log("format_reply", "info", summary_msg, summary=True),
+        ],
     }
 
 
-# ── Routing ───────────────────────────────────────────────────────────────────
+# Routing
+
+def _route_after_resolve_menu(state: AdjustmentState) -> str:
+    outcome = state.get("resolution_outcome")
+    if outcome == "cancelled":
+        return "emit_cancel"
+    if outcome == "scope_resolved":
+        # Skip parse_request entirely — feature/direction/magnitude are already
+        # carried from the prior turn, and we just set scope. Go straight to
+        # target resolution.
+        return "resolve_targets"
+    # clarif_resolved (user_message rewritten) and no_menu(_match) both go through parse_request normally.
+    return "parse_request"
+
 
 def _route_after_parse(state: AdjustmentState) -> str:
     if state.get("needs_clarification"):
@@ -547,11 +754,15 @@ def _route_after_resolve(state: AdjustmentState) -> str:
     return "measure_reference"
 
 
-# ── Graph builder ──────────────────────────────────────────────────────────────
+# Graph builder
 
 def build_adjustment_graph() -> StateGraph:
     g = StateGraph(AdjustmentState)
 
+    # 2026-05-01: new entry node `resolve_pending_menu` runs first to catch
+    # menu-pick replies (numbers, keywords, option text) before parse_request.
+    g.add_node("resolve_pending_menu", resolve_pending_menu)
+    g.add_node("emit_cancel", emit_cancel)
     g.add_node("parse_request", parse_request)
     g.add_node("clarify", clarify_node)
     g.add_node("reject_current", reject_current)
@@ -562,7 +773,13 @@ def build_adjustment_graph() -> StateGraph:
     g.add_node("execute_enhancement", execute_enhancement)
     g.add_node("format_reply", format_reply)
 
-    g.set_entry_point("parse_request")
+    g.set_entry_point("resolve_pending_menu")
+    g.add_conditional_edges("resolve_pending_menu", _route_after_resolve_menu, {
+        "emit_cancel": "emit_cancel",
+        "resolve_targets": "resolve_targets",
+        "parse_request": "parse_request",
+    })
+    g.add_edge("emit_cancel", END)
     g.add_conditional_edges("parse_request", _route_after_parse, {
         "clarify": "clarify",
         "reject_current": "reject_current",

@@ -1,5 +1,4 @@
 import pandas as pd
-import random
 from langchain_core.tools import tool
 from atdj.config import CATALOG_PATH
 from atdj.rag.select_tanda_old import select_tanda as _select_tanda
@@ -8,74 +7,6 @@ from atdj.rag.prompt_to_features import build_translator, load_catalog
 
 def _load_catalog() -> pd.DataFrame:
     return pd.read_csv(CATALOG_PATH)
-
-
-@tool
-def search_catalog(
-    style: str,
-    decade: str,
-    orchestra: str | None = None,
-    exclude_track_ids: list[str] = [],
-    limit: int = 20,
-) -> list[dict]:
-    """Search the catalog for tracks matching style and decade.
-    Returns 3-4 tracks from the same combo (orchestra + singer + style)."""
-    df = _load_catalog()
-
-    # Filter by style and decade
-    df = df[df["style"] == style]
-    df = df[df["decade"] == decade]
-
-    # Filter by orchestra if specified
-    if orchestra:
-        df = df[df["orchestra"].str.lower() == orchestra.lower()]
-
-    # Exclude already used tracks
-    if exclude_track_ids:
-        df = df[~df["filename"].isin(exclude_track_ids)]
-
-    if df.empty:
-        return []
-
-    # Group by combo_key and pick a valid combo (at least 3 tracks)
-    valid_combos = [
-        (key, group)
-        for key, group in df.groupby("combo_key")
-        if len(group) >= 3
-    ]
-
-    if not valid_combos:
-        return []
-
-    # Pick a random combo
-    combo_key, combo_tracks = random.choice(valid_combos)
-
-    # Take 3 or 4 tracks randomly
-    n = random.choice([3, 4]) if len(combo_tracks) >= 4 else 3
-    selected = combo_tracks.sample(n=n)
-
-    return selected.to_dict(orient="records")
-
-# Original (Tina): hardcoded provider="gemini" and csv_path="data/reduced_catalog.csv".
-# Replaced below to honor the UI's provider selection and the REDUCED_CATALOG_PATH
-# config constant — see doc/changes_after_merge.md for context.
-# @tool
-# def search_catalog_rag(
-#     prompt: str,
-#     csv_path: str = "data/reduced_catalog.csv",
-# ) -> list[dict]:
-#     """Search catalog using RAG-powered tanda selection.
-#     Takes a natural language prompt and returns the best matching tanda."""
-#     try:
-#         df = load_catalog(csv_path)
-#         translator = build_translator(df, provider="gemini")
-#         bundle = translator.translate(prompt)
-#         result = _select_tanda(bundle, df)
-#         if result and result.tanda:
-#             return [t for t in result.tanda]
-#         return []
-#     except Exception as e:
-#         return [{"error": str(e)}]
 
 
 @tool
@@ -102,39 +33,6 @@ def search_catalog_rag(prompt: str) -> list[dict]:
         # Include UI provider/key state so issues with session-state propagation
         # are visible in the Session Log warning entry.
         return [{"error": f"{e} [provider={provider!r}, model={model!r}, key_set={bool(api_key)}]"}]
-
-@tool
-def validate_tanda(track_filenames: list[str]) -> dict:
-    """Check if a list of track filenames forms a valid tanda."""
-    df = _load_catalog()
-    tracks = df[df["filename"].isin(track_filenames)]
-    errors = []
-
-    if len(tracks) < 3 or len(tracks) > 4:
-        errors.append(f"Tanda must have 3-4 tracks, got {len(tracks)}")
-    if tracks["orchestra"].nunique() > 1:
-        errors.append(f"All tracks must share one orchestra: {tracks['orchestra'].unique().tolist()}")
-    if tracks["style"].nunique() > 1:
-        errors.append(f"All tracks must share one style: {tracks['style'].unique().tolist()}")
-    if tracks["decade"].nunique() > 1:
-        errors.append(f"All tracks must share one decade: {tracks['decade'].unique().tolist()}")
-
-    return {"valid": len(errors) == 0, "errors": errors}
-
-
-@tool
-def get_energy_target(tanda_position: int, total_tandas: int) -> float:
-    """Return the target energy level (0.0-1.0) for a given tanda position."""
-    if total_tandas <= 0:
-        return 0.5
-    progress = tanda_position / total_tandas
-    if progress < 0.4:
-        return 0.3 + (progress / 0.4) * 0.4
-    elif progress < 0.6:
-        return 0.7 + ((progress - 0.4) / 0.2) * 0.2
-    else:
-        return 0.9 - ((progress - 0.6) / 0.4) * 0.4
-
 
 @tool
 def select_cortina(

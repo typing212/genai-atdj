@@ -16,7 +16,7 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as st_components
 import atdj.config as cfg
-from atdj.config import CATALOG_PATH
+from atdj.config import CATALOG_PATH, CORTINAS_DIR
 from atdj.playback.player import PlaybackQueue
 from atdj.ui.audio_player import render_audio_player
 
@@ -53,34 +53,54 @@ CATALOG_FALLBACK = [
 PROVIDER_MODELS = {
     "Claude": ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5"],
     "Gemini": ["gemini-2.0-flash", "gemini-1.5-pro", "gemini-1.5-flash"],
-    "Ollama": ["llama3.2", "mistral", "phi3"],
+    # 2026-05-01: Ollama option removed — `atdj/config.get_ui_llm()` only wires
+    # Claude (ChatAnthropic) and Gemini (ChatGoogleGenerativeAI). Anything else
+    # silently falls through to ChatGoogleGenerativeAI with the wrong API key.
 }
 KEY_LABELS = {
     "Claude": "Anthropic API Key",
     "Gemini": "Google API Key",
-    "Ollama": "Ollama Host URL (optional)",
 }
-PLANNING_DESCRIPTIONS = {
-    "convention": "Strict rules: same orchestra, singer & decade per tanda. No exceptions.",
-    "flexible":   "Agent may mix if it supplies a written rationale. Style is always enforced.",
-}
-
 CHAT_STUB = "Got it — I'm still warming up. Connect me to the music pool for real responses. _(stub)_"
-CHAT_CONTEXTS = {
-    "Any":               "💬",
-    "Tanda Planning":    "📋",
-    "Q&A":               "🎵",
-    "Audio Enhancement": "🎛",
-}
 
 # ── Playback helpers ─────────────────────────────────────────────────────────
 # These are new helpers specific to this UI page — no equivalent exists elsewhere.
+
+def _renumber_tanda_ids(items: list[dict]) -> bool:
+    """Re-assign tanda_id by cortina boundary. Heals stale state from before the
+    2026-05-01 fix (where every PLAN restarted at tanda_id=0, so multiple stacked
+    plans collided and `next_tanda` audio adjustments lumped 12+ tracks together).
+
+    Treats every contiguous run of songs separated by cortinas as one tanda.
+    Mutates items in place. Returns True iff any tanda_id was changed.
+    """
+    changed = False
+    next_id = 0
+    saw_song_in_current_tanda = False
+    for it in items:
+        if it.get("type") == "cortina":
+            if saw_song_in_current_tanda:
+                next_id += 1
+                saw_song_in_current_tanda = False
+            continue
+        if it.get("type") == "song":
+            if it.get("tanda_id") != next_id:
+                it["tanda_id"] = next_id
+                changed = True
+            saw_song_in_current_tanda = True
+    return changed
+
 
 def _get_pq() -> PlaybackQueue:
     if "pq_data" not in st.session_state:
         pq = PlaybackQueue(list(PLAYLIST_STUB))
         st.session_state["pq_data"] = pq.to_session_state()
-    return PlaybackQueue.from_session_state(st.session_state["pq_data"])
+    pq = PlaybackQueue.from_session_state(st.session_state["pq_data"])
+    # 2026-05-01: auto-heal colliding tanda_ids on every load. Cheap (one walk).
+    # Persists the migration if anything changed so subsequent loads are no-ops.
+    if _renumber_tanda_ids(pq.items):
+        st.session_state["pq_data"] = pq.to_session_state()
+    return pq
 
 
 def _save_pq(pq: PlaybackQueue) -> None:
@@ -89,9 +109,12 @@ def _save_pq(pq: PlaybackQueue) -> None:
 
 
 def _log(text: str, kind: str = "info") -> None:
-    """Append a timestamped entry to the session log."""
+    """Append a timestamped entry to the session log. Auto-prefixes with the
+    👤 You category (so user actions are visually distinct from agent events)."""
     import datetime
     ts = datetime.datetime.now().strftime("%H:%M:%S")
+    if not text.startswith(("👤", "📋", "🎛")):
+        text = f"👤 You — {text}"
     st.session_state.setdefault("agent_notifications", []).append(
         {"type": kind, "text": text, "timestamp": ts}
     )
@@ -186,11 +209,12 @@ def _lbl(text: str):
     )
 
 def _render_energy_chart(playlist: list, current_index: int = 0):
-    """Solid line = played · Dotted line = planned · Hover = song card."""
+    """Solid line = played · Dotted line = planned · Hover = song card.
+    Cortinas appear as hollow squares (visual fallback at 50%); their underlying
+    items keep `energy=None` — the 0.5 is render-only, never written back."""
     import altair as alt
 
-    songs = [s for s in playlist if s["type"] == "song"]
-    if not songs:
+    if not any(item.get("type") in ("song", "cortina") for item in playlist):
         st.markdown(
             '<div style="background:#F9F9F9;border:1px dashed #DEDEDE;border-radius:8px;'
             f'padding:16px;height:{EA_CHART_H}px;display:flex;flex-direction:column;'
@@ -202,55 +226,87 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
         )
         return
 
-    # Normalize energy to [0, 1] using catalog min/max
-    # NOTE: must use the RAG catalog (reduced_catalog.csv) — that's the catalog the planner
-    # pulls track-level `energy` from, and `_load_catalog()` returns the playback catalog
-    # with no `energy` column, which silently fell through to a wrong fallback range.
-    try:
-        cat = _get_rag_catalog()
-        e_vals = cat["energy"].dropna().astype(float)
-        e_min, e_max = float(e_vals.min()), float(e_vals.max())
-    except Exception:
-        e_min, e_max = 0.0, 1.0
-
-    def _norm_energy(s: dict) -> tuple[float, bool]:
-        """Return (normalised 0-1 value, has_real_energy)."""
-        raw = s.get("energy")
-        if raw is not None:
+    # Pre-compute anchor y-values: any item (song OR cortina) that has a known
+    # numeric energy. Cortinas don't yet, so in practice this collects songs from
+    # the catalog. Used to interpolate the y-position of unknown-energy items so
+    # their hollow square sits on the energy curve instead of pinned to 50%.
+    # Render-only — never written back to the underlying playlist items.
+    _anchor_e_at: dict[int, float] = {}
+    for _i, _item in enumerate(playlist):
+        _raw = _item.get("energy")
+        if _raw is not None:
             try:
-                v = float(raw)
-                norm = (v - e_min) / (e_max - e_min) if e_max > e_min else 0.5
-                return norm, True
+                _anchor_e_at[_i] = float(_raw)
             except (ValueError, TypeError):
                 pass
-        return 0.5, False   # unknown → mid-point, flagged as estimated
 
-    # Map playlist-level current_index to song-only index
-    song_indices = [i for i, s in enumerate(playlist) if s["type"] == "song"]
-    playing_pos = 0
-    for si, pi in enumerate(song_indices):
-        if pi >= current_index:
-            playing_pos = si
-            break
+    def _interp_y(idx: int) -> float:
+        valid = sorted(_anchor_e_at.keys())
+        prev_i = max((i for i in valid if i < idx), default=None)
+        next_i = min((i for i in valid if i > idx), default=None)
+        if prev_i is not None and next_i is not None:
+            t = (idx - prev_i) / (next_i - prev_i)
+            return _anchor_e_at[prev_i] + t * (_anchor_e_at[next_i] - _anchor_e_at[prev_i])
+        if prev_i is not None:
+            return _anchor_e_at[prev_i]
+        if next_i is not None:
+            return _anchor_e_at[next_i]
+        return 0.5  # ultimate fallback: no anchors at all
+
+    def _energy_for_render(idx: int, item: dict) -> tuple[float, bool]:
+        """Return (display y-position in [0,1], has_real_energy).
+        Items with no real energy get an interpolated y based on neighbouring
+        anchors — visual smoothing only, the underlying `energy` stays None."""
+        raw = item.get("energy")
+        if raw is not None:
+            try:
+                return float(raw), True
+            except (ValueError, TypeError):
+                pass
+        return _interp_y(idx), False
+
+    playing_pos = current_index  # x-axis uses playlist index directly now (cortinas keep their slot)
     records = []
-    for idx, s in enumerate(songs):
-        decade = f"{(int(s['year']) // 10) * 10}s" if s.get("year") else "—"
-        energy_val, has_energy = _norm_energy(s)
-        base_rec = {
-            "pos":        idx,
-            "title":      s["title"],
-            "orchestra":  s["orchestra"],
-            "singer":     s.get("singer", "—") or "—",
-            "style":      s["style"],
-            "decade":     decade,
-            "source":     "💡 Agent" if s.get("source") == "agent" else "👤 You",
-            "energy":     energy_val,
-            "has_energy": has_energy,
-            "segment":    "played" if idx <= playing_pos else "planned",
-        }
-        records.append(base_rec)
-        if idx == playing_pos:
-            records.append({**base_rec, "segment": "planned"})
+    for idx, item in enumerate(playlist):
+        item_type = item.get("type")
+        if item_type not in ("song", "cortina"):
+            continue
+        if item_type == "song":
+            decade = f"{(int(item['year']) // 10) * 10}s" if item.get("year") else "—"
+            energy_val, has_energy = _energy_for_render(idx, item)
+            base_rec = {
+                "pos":        idx,
+                "type":       "song",
+                "title":      item["title"],
+                "orchestra":  item["orchestra"],
+                "singer":     item.get("singer", "—") or "—",
+                "style":      item["style"],
+                "decade":     decade,
+                "source":     "💡 Agent" if item.get("source") == "agent" else "👤 You",
+                "energy":     energy_val,
+                "has_energy": has_energy,
+                "segment":    "played" if idx <= playing_pos else "planned",
+            }
+            records.append(base_rec)
+            if idx == playing_pos:
+                records.append({**base_rec, "segment": "planned"})
+        else:  # cortina
+            # Underlying item keeps energy=None — the y here is render-only,
+            # interpolated between neighbouring songs so the square sits on the curve.
+            energy_val, has_energy = _energy_for_render(idx, item)
+            records.append({
+                "pos":        idx,
+                "type":       "cortina",
+                "title":      item.get("title", "Cortina"),
+                "orchestra":  "—",
+                "singer":     "—",
+                "style":      "CORTINA",
+                "decade":     "—",
+                "source":     "💡 Agent" if item.get("source") == "agent" else "👤 You",
+                "energy":     energy_val,
+                "has_energy": has_energy,
+                "segment":    "played" if idx <= playing_pos else "planned",
+            })
 
     df = pd.DataFrame(records)
     base = alt.Chart(df).encode(
@@ -260,7 +316,7 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
                 axis=alt.Axis(title=None, format=".0%", tickCount=3,
                               gridColor="#F5F5F5", domainColor="#DDD")),
         tooltip=[
-            alt.Tooltip("title:N",     title="Song"),
+            alt.Tooltip("title:N",     title="Title"),
             alt.Tooltip("style:N",     title="Style"),
             alt.Tooltip("orchestra:N", title="Orchestra"),
             alt.Tooltip("singer:N",    title="Singer"),
@@ -268,16 +324,17 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
             alt.Tooltip("source:N",    title="Source"),
         ],
     )
+    # Lines connect songs only — cortinas are visual markers and shouldn't pull the energy curve through them
     played_line  = base.mark_line(color="#1A5294", strokeWidth=2.5).transform_filter(
-        alt.datum.segment == "played"
+        "datum.type == 'song' && datum.segment == 'played'"
     )
     planned_line = base.mark_line(color="#BBBBBB", strokeWidth=2,
                                   strokeDash=[5, 4]).transform_filter(
-        alt.datum.segment == "planned"
+        "datum.type == 'song' && datum.segment == 'planned'"
     )
-    # Known-energy tracks: filled circle; unknown: hollow square at 50%
+    # Known-energy songs: filled circle. Cortinas + unknown-energy songs: hollow square at 50%.
     dots_known = base.mark_circle(size=55, opacity=0.9).transform_filter(
-        alt.datum.has_energy == True
+        "datum.type == 'song' && datum.has_energy == true"
     ).encode(
         color=alt.condition(
             alt.datum.segment == "played",
@@ -287,7 +344,7 @@ def _render_energy_chart(playlist: list, current_index: int = 0):
     )
     dots_unknown = base.mark_point(size=50, shape="square", filled=False,
                                    opacity=0.5, strokeWidth=1.5).transform_filter(
-        alt.datum.has_energy == False
+        "datum.has_energy == false"
     ).encode(
         color=alt.value("#BBBBBB")
     )
@@ -339,11 +396,10 @@ def _get_rag_translator(provider: str):
 def _init_settings():
     if st.session_state.get("settings_initialized"):
         return
-    pm = {"claude": "Claude", "gemini": "Gemini", "ollama": "Ollama"}
+    pm = {"claude": "Claude", "gemini": "Gemini"}
     st.session_state["s_provider"] = pm.get(cfg.LLM_PROVIDER, "Claude")
     st.session_state["s_model"]    = cfg.CLAUDE_MODEL
     st.session_state["s_api_key"]  = ""
-    st.session_state["s_planning"] = "convention"
     st.session_state["settings_initialized"] = True
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -371,18 +427,21 @@ def _sidebar():
 
         # Provider + Model side by side
         pv_col, md_col = st.columns(2)
-        provider_opts = list(PROVIDER_MODELS.keys()) + ["Others"]
+        # 2026-05-01: dropped the "Others" option — only Claude and Gemini are
+        # wired in the backend (`atdj/config.get_ui_llm()`).
+        provider_opts = list(PROVIDER_MODELS.keys())
         cur_provider  = st.session_state.get("s_provider", "Claude")
         with pv_col:
             sel_provider = st.selectbox(
                 "Provider", provider_opts,
-                index=provider_opts.index(cur_provider) if cur_provider in provider_opts else len(provider_opts) - 1,
+                index=provider_opts.index(cur_provider) if cur_provider in provider_opts else 0,
                 key="sb_provider", label_visibility="collapsed",
             )
-        provider = sel_provider if sel_provider != "Others" else st.session_state.get("sb_provider_custom", "")
-        if sel_provider == "Others":
-            provider = st.text_input("Provider name", placeholder="e.g. OpenAI",
-                                     key="sb_provider_custom", label_visibility="collapsed")
+        provider = sel_provider
+        if provider != cur_provider:
+            # Provider changed — clear the key so user enters the correct one
+            st.session_state["s_api_key"] = ""
+            st.session_state["sb_api_key"] = ""
         st.session_state["s_provider"] = provider
 
         model_opts = PROVIDER_MODELS.get(provider, []) + ["Others"]
@@ -407,6 +466,11 @@ def _sidebar():
         )
         st.session_state["s_api_key"] = st.session_state.get("sb_api_key", "")
 
+        if provider == "Claude":
+            from atdj.config import GEMINI_API_KEY
+            if not GEMINI_API_KEY:
+                st.info("💡 Add **GEMINI_API_KEY** to .env to enable AI cortina generation via Lyria. Otherwise pool music will be used as fallback.", icon="🎵")
+
         if st.button("Save Settings", type="primary", use_container_width=True, key="sb_save"):
             st.toast("Settings saved.", icon="✅")
 
@@ -427,45 +491,26 @@ def _section_chat():
         for msg in st.session_state["chat_msgs"]:
             avatar = "👤" if msg["role"] == "user" else "💡"
             with st.chat_message(msg["role"], avatar=avatar):
-                if msg["role"] == "user" and msg.get("context") and msg["context"] != "Any":
-                    st.caption(f"{CHAT_CONTEXTS.get(msg['context'], '')} {msg['context']}")
                 st.markdown(msg["content"])
 
     # Unified input card (Claude-style)
     with st.container(border=True):
         st.markdown('<div id="chat-input-card"></div>', unsafe_allow_html=True)
         _input_key = f"chat_text_input_{st.session_state.get('input_counter', 0)}"
-        msg_text = st.text_area(
-            "Message", placeholder="Message the agent…",
-            label_visibility="collapsed", key=_input_key,
-            height=87,
-        )
-        ctx_col, mode_col, send_col = st.columns([3, 3, 1])
-        with ctx_col:
-            context = st.selectbox(
-                "Context", list(CHAT_CONTEXTS.keys()), index=0,
-                format_func=lambda k: f"{CHAT_CONTEXTS[k]} {k}",
-                label_visibility="collapsed", key="chat_context_select",
+        text_col, _spacer, send_col = st.columns([11, 0.4, 1], vertical_alignment="bottom")
+        with text_col:
+            msg_text = st.text_area(
+                "Message", placeholder="Message the agent…",
+                label_visibility="collapsed", key=_input_key,
+                height=87,
             )
-        with mode_col:
-            planning_opts = ["convention", "flexible"]
-            cur_plan = st.session_state.get("s_planning", "convention")
-            cur_idx = planning_opts.index(cur_plan) if cur_plan in planning_opts else 0
-            sel_plan = st.selectbox(
-                "Mode",
-                planning_opts,
-                index=cur_idx,
-                format_func=lambda x: "🎩 Convention" if x == "convention" else "🎨 Flexible",
-                label_visibility="collapsed", key="chat_mode_select",
-            )
-            st.session_state["s_planning"] = sel_plan
         with send_col:
             st.markdown('<div id="send-btn-marker"></div>', unsafe_allow_html=True)
             send = st.button("➤", use_container_width=True, key="chat_send", help="Send")
 
     if send and msg_text.strip():
         # Stash + rerun so the input clears before the long agent call
-        st.session_state["_pending_chat_msg"] = {"text": msg_text.strip(), "context": context}
+        st.session_state["_pending_chat_msg"] = {"text": msg_text.strip()}
         st.session_state["input_counter"] = st.session_state.get("input_counter", 0) + 1
         st.session_state.pop(_input_key, None)
         st.rerun()
@@ -473,16 +518,13 @@ def _section_chat():
     _pending = st.session_state.pop("_pending_chat_msg", None)
     if _pending:
         msg_text = _pending["text"]
-        context = _pending["context"]
         st.session_state["chat_msgs"].append(
-            {"role": "user", "context": context, "content": msg_text.strip()}
+            {"role": "user", "content": msg_text.strip()}
         )
 
         # Show the new user message and a reply slot inside the chat container
         with chat_container:
             with st.chat_message("user", avatar="👤"):
-                if context != "Any":
-                    st.caption(f"{CHAT_CONTEXTS.get(context, '')} {context}")
                 st.markdown(msg_text.strip())
             with st.chat_message("assistant", avatar="💡"):
                 _reply_slot = st.empty()
@@ -491,13 +533,34 @@ def _section_chat():
         from langchain_core.messages import HumanMessage
         from atdj.config import get_ui_llm
 
-        if context == "Tanda Planning":
-            is_planning, is_audio_adjust = True, False
-        elif context == "Q&A":
-            is_planning, is_audio_adjust = False, False
-        elif context == "Audio Enhancement":
+        # 2026-05-01: when an audio-adjustment clarification or rejection is
+        # open (pending_adjustment is set), the next chat message is OFTEN the
+        # user's response to that question — short replies like "cancel" / "1"
+        # / "2" / "Too loud" — and bypassing the classifier routes them to the
+        # audio graph correctly. But if the user has clearly moved on to a new
+        # intent ("plan a Demare tanda", "who is Pugliese", "search ..."), the
+        # bypass would trap them in an audio-loop. So bypass only when the
+        # message looks like a menu pick; otherwise clear the stale pending
+        # state and let the classifier route fresh.
+        def _looks_like_menu_pick(msg: str) -> bool:
+            m = (msg or "").strip().lower()
+            if not m or len(m) > 60:
+                return False
+            new_intent_signals = (
+                "plan ", "play ", "search ", "find ", "add ", "remove ",
+                "clear ", "skip ", "what is", "who is", "tell me", "show me",
+                "how ", "why ", "when ",
+            )
+            if any(s in m for s in new_intent_signals):
+                return False
+            return True
+
+        if st.session_state.get("pending_adjustment") and _looks_like_menu_pick(msg_text):
             is_planning, is_audio_adjust = False, True
         else:
+            # If pending was set but user clearly moved on, drop the stale
+            # clarification so the audio graph doesn't re-prompt next turn.
+            st.session_state.pop("pending_adjustment", None)
             try:
                 _llm = get_ui_llm()
                 _classify = _llm.invoke([HumanMessage(content=f"""Classify into exactly one category:
@@ -556,6 +619,7 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     "candidate_tracks": [], "current_tanda_draft": None, "last_agent_action": None,
                     "qa_question": None, "qa_answer": None, "error_message": None, "retry_count": 0,
                     "agent_log": [], "activity_log": [],
+                    "selected_cortinas": [],
                     "session_plan": session_plan,
                     "picked_tracks": [],
                 }
@@ -565,33 +629,19 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                 for entry in final_state.get("activity_log", []):
                     st.session_state.setdefault("activity_log", []).append(entry)
 
-                # Original parallel selection loop kept below (commented) for reference.
-                # Replaced by tanda_planner, which now calls search_catalog_rag itself
-                # and writes the chosen tracks into state["picked_tracks"].
-                # from atdj.rag.select_tanda import select_tanda as _select_tanda
-                # from atdj.rag.prompt_to_features import build_translator, load_catalog
-                # from atdj.config import RAG_CATALOG_PATH
-                # df = _get_rag_catalog()
-                # translator = _get_rag_translator(
-                #     st.session_state.get("s_provider", "Claude").lower()
-                # )
-                # tanda_rules = {"tango": 4, "vals": 3, "milonga": 3}
-                # new_playlist = []
-                # tanda_idx = 0
-                # for tanda_prompt, style in session_plan:
-                #     bundle = translator.translate(tanda_prompt)
-                #     result = _select_tanda(bundle, df)
-                #     if result and result.tanda:
-                #         expected_count = tanda_rules.get(style, 4)
-                #         tracks = result.tanda[:expected_count]
-                #         for i, track in enumerate(tracks):
-                #             new_playlist.append({...})
-                #         if tanda_idx < len(session_plan) - 1:
-                #             new_playlist.append({"type": "cortina", ...})
-                #         tanda_idx += 1
-
                 new_playlist = []
                 picked_per_tanda = final_state.get("picked_tracks") or []
+                # Load pq up front so the cortina-title resolver below can use it.
+                pq = _get_pq()
+                # Offset tanda_id by the max already in the playlist so each PLAN run
+                # gets globally unique ids. Without this, every plan restarts at 0 and
+                # `next_tanda` audio adjustments collapse all songs with the same
+                # per-plan index across every plan into one giant target set.
+                _existing_max_tid = max(
+                    (p.get("tanda_id", -1) for p in pq.items if p.get("type") == "song"),
+                    default=-1,
+                )
+                _tanda_id_offset = _existing_max_tid + 1
                 for tanda_idx, tanda_tracks in enumerate(picked_per_tanda):
                     if not tanda_tracks:
                         continue
@@ -611,13 +661,77 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                                     str(int(track.get("duration_seconds", 0) % 60)).zfill(2),
                             "energy": track.get("energy"),
                             "source": "agent",
-                            "tanda_id": tanda_idx,
+                            "tanda_id": _tanda_id_offset + tanda_idx,
                         })
                     if tanda_idx < len(picked_per_tanda) - 1:
+                        # 2026-05-01: read the agent's actual cortina selection from
+                        # state["selected_cortinas"] (one entry per cortina_selector
+                        # call, in order). The selection algorithm in
+                        # atdj/agent/nodes.py:cortina_selector currently returns the
+                        # placeholder `default_cortina` because the song catalog CSV
+                        # has no cortina rows — that gets a separate tune later.
+                        # For now: take the agent's title, then run it through the
+                        # PlaybackQueue resolver to get the file the player will
+                        # actually serve. Use that file's stem as the displayed
+                        # title so display == playback (no silent mismatch).
+                        _agent_cortinas = final_state.get("selected_cortinas") or []
+                        if tanda_idx < len(_agent_cortinas):
+                            _cor = _agent_cortinas[tanda_idx]
+                            _agent_title = _cor.get("title") or _cor.get("filename") or "Cortina"
+                        else:
+                            _agent_title = "Cortina"
+                        _resolved_path = pq.resolve_file_path({"type": "cortina", "title": _agent_title})
+                        _cortina_title = _Path(_resolved_path).stem if _resolved_path else _agent_title
                         new_playlist.append({
-                            "type": "cortina", "title": "Cortina",
+                            "type": "cortina", "title": _cortina_title,
                             "duration": "0:20", "source": "agent",
                         })
+
+                if new_playlist and not is_full_session:
+                    # Generate a closing cortina for single-tanda plans
+                    from atdj.config import get_ui_api_key, get_ui_provider, GEMINI_API_KEY
+                    from atdj.cortina.generator import _summarize_tanda
+                    from atdj.cortina.pool import find_best_cortina
+                    from datetime import datetime as _dt
+                    _provider = get_ui_provider()
+                    _api_key = (get_ui_api_key() if _provider == "Gemini" else "") or GEMINI_API_KEY
+                    if picked_per_tanda:
+                        if _api_key:
+                            try:
+                                from atdj.cortina.generator import generate_cortina
+                                from atdj.config import ROOT_DIR
+                                _cortina = generate_cortina(
+                                    prev_tracks=picked_per_tanda[0],
+                                    next_style=None,
+                                    output_dir=ROOT_DIR / "data" / "cortinas" / "generated",
+                                    api_key=_api_key,
+                                )
+                                new_playlist.append(_cortina)
+                                st.session_state.setdefault("agent_notifications", []).append({
+                                    "type": "info",
+                                    "text": f"🎵 CORTINA — Generated via Lyria ({_cortina.get('title', 'Cortina')})",
+                                    "timestamp": _dt.now().strftime("%H:%M:%S"),
+                                })
+                            except Exception as _e:
+                                # Lyria failed — fall back to pool
+                                _summary = _summarize_tanda(picked_per_tanda[0])
+                                _cortina = find_best_cortina(_summary)
+                                new_playlist.append(_cortina)
+                                st.session_state.setdefault("agent_notifications", []).append({
+                                    "type": "warning",
+                                    "text": f"🎵 CORTINA — Lyria failed, using pool ({_cortina.get('title', 'Cortina')})",
+                                    "timestamp": _dt.now().strftime("%H:%M:%S"),
+                                })
+                        else:
+                            # No Gemini key — use pool directly
+                            _summary = _summarize_tanda(picked_per_tanda[0])
+                            _cortina = find_best_cortina(_summary)
+                            new_playlist.append(_cortina)
+                            st.session_state.setdefault("agent_notifications", []).append({
+                                "type": "info",
+                                "text": f"🎵 CORTINA — Selected from pool ({_cortina.get('title', 'Cortina')})",
+                                "timestamp": _dt.now().strftime("%H:%M:%S"),
+                            })
 
                 if new_playlist:
                     # Append to the existing queue instead of overwriting it,
@@ -626,32 +740,9 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     pq.items.extend(new_playlist)
                     _save_pq(pq)
 
-                    if st.session_state.get("auto_enhance", False):
-                        from atdj.audio.enhancement import enhance_tanda
-                        from atdj.audio.adjustment_graph import compute_intent_overrides
-                        from atdj.config import PROCESSED_DIR
-                        from pathlib import Path
-                        track_paths = []
-                        for item in new_playlist:
-                            if item["type"] == "song":
-                                raw_path = pq.resolve_raw_path(item)
-                                if raw_path:
-                                    track_paths.append(Path(raw_path))
-                        if track_paths:
-                            try:
-                                stored_intent = st.session_state.get("stored_adjustment_intent")
-                                overrides = (
-                                    compute_intent_overrides(stored_intent, len(track_paths))
-                                    if stored_intent else None
-                                )
-                                enhance_tanda(track_paths, Path(PROCESSED_DIR), param_overrides=overrides)
-                                st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "decision", "text": f"Enhanced {len(track_paths)} tracks", "timestamp": ""}
-                                )
-                            except Exception as e:
-                                st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "warning", "text": f"Enhancement skipped: {e}", "timestamp": ""}
-                                )
+                    # 2026-05-01: removed the auto-enhance-on-PLAN hook + Quality
+                    # Enhance toggle. Audio enhancement now ONLY fires from the chat
+                    # path (atdj/audio/adjustment_graph.py).
 
                 songs = [t for t in new_playlist if t["type"] == "song"]
                 if songs:
@@ -694,7 +785,6 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     "user_message": msg_text.strip(),
                     "playlist": pq.items,
                     "current_index": pq.current_index,
-                    "auto_enhance_on": st.session_state.get("auto_enhance", False),
                     "output_dir": str(PROCESSED_DIR),
                     "resolved_paths": resolved_paths,
                     "scope": None, "feature": None, "direction": None,
@@ -708,8 +798,6 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     "reference_params": None,
                     "computed_overrides": [],
                     "execution_results": [],
-                    "store_intent": False,
-                    "intent_to_store": None,
                     "reply": "",
                     "activity_log": [],
                 }
@@ -724,12 +812,14 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                     if k not in ("reply", "execution_results", "activity_log")
                 }
 
-            if final.get("store_intent") and st.session_state.get("auto_enhance"):
-                st.session_state["stored_adjustment_intent"] = final["intent_to_store"]
-
             for entry in final.get("activity_log", []):
+                # Only surface entries flagged as user-visible summaries; the JSON
+                # log file still receives every sub-step for fault tracking.
+                if not entry.get("summary"):
+                    continue
                 st.session_state.setdefault("agent_notifications", []).append(
-                    {"type": "info", "text": entry.get("message", ""),
+                    {"type": entry.get("level", "info"),
+                     "text": f"🎛 AUDIO — {entry.get('message', '')}",
                      "timestamp": entry.get("timestamp", "")}
                 )
 
@@ -1115,9 +1205,15 @@ def _section_music():
                 max_dur = cortina_sec if is_cortina else None
                 effective_gap = 0 if is_cortina else gap_sec
                 if file_path:
+                    # 2026-05-01 (Test 7.9): autoplay only after the user has
+                    # explicitly initiated playback (clicked a ▶ jump button or
+                    # ⏭/⏮). Until then the iframe renders with controls but no
+                    # autoplay, so a fresh PLAN doesn't blast music.
+                    _autoplay_ok = bool(st.session_state.get("playback_initiated", False))
                     render_audio_player(
                         file_path, gap_seconds=effective_gap,
                         max_duration=max_dur, fade_in_seconds=2.0,
+                        autoplay=_autoplay_ok,
                     )
                 else:
                     _autoskip_html = f"""
@@ -1155,11 +1251,13 @@ def _section_music():
                     if st.button("⏮", use_container_width=True, help="Previous track", key="pb_prev"):
                         pq.previous_track()
                         _save_pq(pq)
+                        st.session_state["playback_initiated"] = True
                         st.rerun()
                 with btn2:
                     if st.button("⏭", use_container_width=True, help="Skip to next", key="pb_skip"):
                         pq.next_track()
                         _save_pq(pq)
+                        st.session_state["playback_initiated"] = True
                         st.rerun()
                 with gap_bar_col:
                     _gap_bar_html = f"""
@@ -1201,27 +1299,68 @@ def _section_music():
                     """
                     st_components.html(_gap_bar_html, height=28)
                 st.markdown('<div style="height:6px"></div>', unsafe_allow_html=True)
-                enh_c, gap_c, cort_c = st.columns(3)
-                with enh_c:
-                    st.markdown(
-                        '<p style="font-size:13px;font-weight:400;color:#31333F;margin:0 0 14px">Quality Enhance</p>',
-                        unsafe_allow_html=True,
+                # 2026-05-01: wrapped in a fragment so slider changes don't trigger
+                # a full page rerun (which would re-render the audio iframe and
+                # interrupt the currently-playing song). The new value still flows
+                # into session_state immediately; render_audio_player picks it up
+                # on the next track auto-advance. Also unified the slider/toggle
+                # log entries to the "change" kind so they share the grey colour
+                # with the other user actions (move/remove/clear/add).
+                # 2026-05-01: in-fragment changes don't repaint the Session Log
+                # panel (it lives outside this fragment). To still give the user
+                # immediate confirmation, each change also fires st.toast — toasts
+                # render globally and appear right after the fragment rerun. The
+                # Session Log entry is still recorded via _log() and shows on the
+                # next full rerun.
+                def _on_gap_change():
+                    v = st.session_state.get("song_gap")
+                    _log(f'Transition gap set to {v}s (applies to next track).', "change")
+                    st.toast(f'Transition gap set to {v}s — applies to next track', icon='👤')
+
+                def _on_cortina_change():
+                    v = st.session_state.get("cortina_len")
+                    _log(f'Cortina length set to {v}s (applies to next cortina).', "change")
+                    st.toast(f'Cortina length set to {v}s — applies to next cortina', icon='👤')
+
+                @st.fragment
+                def _audio_settings_fragment():
+                    gap_c, cort_c = st.columns(2)
+                    with gap_c:
+                        st.number_input(
+                            "Transition (s)", min_value=0, max_value=60, value=10, key="song_gap",
+                            label_visibility="visible",
+                            on_change=_on_gap_change,
+                        )
+                    with cort_c:
+                        st.number_input(
+                            "Cortina (s)", min_value=5, max_value=120, value=30, key="cortina_len",
+                            label_visibility="visible",
+                            on_change=_on_cortina_change,
+                        )
+                    # 2026-05-01: write the live slider values to the top window
+                    # so the audio iframe's currentGapMs() / currentMaxDur()
+                    # readers see the latest value at advance / timeupdate time.
+                    # Without this, the audio iframe (which is NOT re-rendered
+                    # by fragment-scoped reruns) would keep using its baked
+                    # initial values forever. The varying timestamp comment
+                    # forces components.html to re-render the iframe instead of
+                    # caching the previous identical-content one.
+                    import time as _time_mod
+                    _gap_ms = int(st.session_state.get("song_gap", 10)) * 1000
+                    _cor_s  = int(st.session_state.get("cortina_len", 30))
+                    _stamp = int(_time_mod.time() * 1000)
+                    st_components.html(
+                        f"""<!-- atdj-slider-write {_stamp} -->
+                        <script>
+                          try {{ window.top.__atdjGapMs = {_gap_ms}; }} catch (e) {{}}
+                          try {{ window.top.__atdjCortinaSec = {_cor_s}; }} catch (e) {{}}
+                          try {{ window.parent.__atdjGapMs = {_gap_ms}; }} catch (e) {{}}
+                          try {{ window.parent.__atdjCortinaSec = {_cor_s}; }} catch (e) {{}}
+                        </script>""",
+                        height=1,
                     )
-                    st.toggle("Quality Enhance", value=False, key="auto_enhance",
-                              label_visibility="collapsed",
-                              on_change=lambda: _log(f'Quality Enhance turned {"ON" if st.session_state.get("auto_enhance") else "OFF"}.', "info"))
-                with gap_c:
-                    st.number_input(
-                        "Transition (s)", min_value=0, max_value=60, value=10, key="song_gap",
-                        label_visibility="visible",
-                        on_change=lambda: _log(f'Transition gap set to {st.session_state.get("song_gap")}s.', "info"),
-                    )
-                with cort_c:
-                    st.number_input(
-                        "Cortina (s)", min_value=5, max_value=120, value=30, key="cortina_len",
-                        label_visibility="visible",
-                        on_change=lambda: _log(f'Cortina length set to {st.session_state.get("cortina_len")}s.', "info"),
-                    )
+
+                _audio_settings_fragment()
 
         # ── Row 2: ENERGY ARC (full width of main_col) ──
         _hr()
@@ -1238,8 +1377,12 @@ def _section_music():
         with clear_col:
             if pq.items and st.button("Clear", key="pl_clear_all", help="Clear all tracks", use_container_width=True):
                 _log(f'Cleared playlist ({len(pq.items)} tracks).', "change")
-                pq.items.clear()
+                pq.clear()
                 _save_pq(pq)
+                # 2026-05-01 (Test 7.9): clearing is the "explicit stop" — reset
+                # the autoplay-armed flag so the next plan won't blast music until
+                # the user manually clicks ▶ again.
+                st.session_state["playback_initiated"] = False
                 st.rerun()
         playlist = pq.items
         cortina_len = st.session_state.get("cortina_len", 30)
@@ -1251,7 +1394,7 @@ def _section_music():
                 if item["type"] == "cortina":
                     b_src_c = _source_icon(item.get("source", "agent"))
                     b_cort  = _badge_sm("C", "#EEEEEE", "#888888")
-                    sc_c, cb1, cb2, cb3 = st.columns([20, 1, 1, 1])
+                    sc_c, cb0, cb1, cb2, cb3 = st.columns([19, 1, 1, 1, 1])
                     c_mins, c_secs = divmod(cortina_len, 60)
                     c_dur_str = f"{c_mins}:{c_secs:02d}"
                     with sc_c:
@@ -1266,6 +1409,15 @@ def _section_music():
                             f'</div>',
                             unsafe_allow_html=True,
                         )
+                    with cb0:
+                        if i != pq.current_index:
+                            if st.button("▶", key=f"pl_play_{i}", help="Jump to this cortina", use_container_width=True):
+                                pq.jump_to(i)
+                                _save_pq(pq)
+                                # 2026-05-01: no log entry — pure navigation, not a state change worth recording.
+                                # 2026-05-01 (Test 7.9): user explicitly initiated playback → enable autoplay.
+                                st.session_state["playback_initiated"] = True
+                                st.rerun()
                     with cb1:
                         if i > 0:
                             if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
@@ -1300,7 +1452,7 @@ def _section_music():
 
                 is_current = (i == pq.current_index)
                 if is_current:
-                    sc, _b1, _b2, _b3 = st.columns([20, 1, 1, 1])
+                    sc, _b0, _b1, _b2, _b3 = st.columns([19, 1, 1, 1, 1])
                     with sc:
                         st.markdown(
                             f'<div style="padding:5px 8px;border-left:3px solid {clr};'
@@ -1318,7 +1470,7 @@ def _section_music():
                 else:
                     prev_s = next((j for j in range(i - 1, -1, -1) if playlist[j]["type"] != "cortina"), -1)
                     next_s = next((j for j in range(i + 1, len(playlist)) if playlist[j]["type"] != "cortina"), -1)
-                    sc, b1, b2, b3 = st.columns([20, 1, 1, 1])
+                    sc, b0, b1, b2, b3 = st.columns([19, 1, 1, 1, 1])
                     with sc:
                         st.markdown(
                             f'<div style="padding:5px 8px;border-left:2px solid {clr}88;'
@@ -1332,6 +1484,14 @@ def _section_music():
                             f'</div>',
                             unsafe_allow_html=True,
                         )
+                    with b0:
+                        if st.button("▶", key=f"pl_play_{i}", help="Jump to this track", use_container_width=True):
+                            pq.jump_to(i)
+                            _save_pq(pq)
+                            # 2026-05-01: no log entry — pure navigation, not a state change worth recording.
+                            # 2026-05-01 (Test 7.9): user explicitly initiated playback → enable autoplay.
+                            st.session_state["playback_initiated"] = True
+                            st.rerun()
                     with b1:
                         if prev_s >= 0 and prev_s != pq.current_index:
                             if st.button("↑", key=f"pl_up_{i}", help="Move up", use_container_width=True):
@@ -1364,21 +1524,24 @@ def _section_music():
         _lbl("Session Log")
         # Hoist any new activity_log entries (from Tina's LangGraph nodes) into the
         # agent_notifications list that this panel renders. Dedup on identical entries.
+        # 2026-05-01: filter to summary=True; raw [node_name] prefixes replaced
+        # with 📋 PLAN category prefix.
         if "activity_log" in st.session_state:
             for entry in st.session_state["activity_log"]:
+                if not entry.get("summary"):
+                    continue
                 notification = {
                     "type": entry.get("level", "info"),
-                    "text": f"[{entry.get('node', '?')}] {entry.get('message', '')}",
+                    "text": f"📋 PLAN — {entry.get('message', '')}",
                     "timestamp": entry.get("timestamp", ""),
                 }
                 if notification not in st.session_state["agent_notifications"]:
                     st.session_state["agent_notifications"].append(notification)
         notif_colors = {
-            "info": ("#E8F4FD", "#1A6FAD"),
-            "change": ("#FEF9E7", "#B7770D"),
-            "decision": ("#E8F8E8", "#2D8A4E"),
-            "warning": ("#FEF9E7", "#B7770D"),
-            "error": ("#FDE8E8", "#C44040"),
+            "info":    ("#E8F4FD", "#1A6FAD"),  # blue — agent informational entries
+            "change":  ("#F0F2F5", "#5A6C7E"),  # grey — user actions (was amber, conflicted with warning)
+            "warning": ("#FEF9E7", "#B7770D"),  # amber — reserved for failures / non-fatal problems
+            "error":   ("#FDE8E8", "#C44040"),  # red — exceptions
         }
         with st.container(height=150):
             for n in reversed(st.session_state["agent_notifications"]):
@@ -1417,7 +1580,19 @@ def _section_music():
                     df["singer"].astype(str).str.contains(query, case=False, na=False)
                 )
                 results = df[mask].head(6)
-                if results.empty:
+                # Also search cortinas (filename match against the CORTINAS_DIR folder).
+                # Cortinas have no orchestra/singer/year/energy in metadata — just the filename.
+                cortinas_path = _Path(CORTINAS_DIR)
+                cortina_matches = []
+                if cortinas_path.exists():
+                    q_lower = query.lower()
+                    for f in sorted(list(cortinas_path.glob("*.mp3")) + list(cortinas_path.glob("*.wav"))):
+                        if q_lower in f.stem.lower() or q_lower in "cortina":
+                            cortina_matches.append(f)
+                            if len(cortina_matches) >= 6:
+                                break
+
+                if results.empty and not cortina_matches:
                     st.caption("No results found.")
                 else:
                     next_tid = max((p.get("tanda_id", 0) for p in pq.items if p["type"] == "song"), default=0) + 1
@@ -1449,13 +1624,42 @@ def _section_music():
                                 }
                                 pq.items.append(entry)
                                 _save_pq(pq)
-                                st.session_state.setdefault("agent_notifications", []).append(
-                                    {"type": "change", "text": f'You added "{row["title"]}" to playlist end.'}
-                                )
+                                _log(f'Added "{row["title"]}" to playlist end.', "change")
                                 st.toast(f'"{row["title"]}" added to playlist.', icon="👤")
                                 st.rerun()
+
+                    # Cortina results — filename-based, "C" badge, no orchestra/singer/year metadata.
+                    for cf in cortina_matches:
+                        c_title = cf.stem
+                        res_col, add_col = st.columns([7, 1])
+                        with res_col:
+                            st.markdown(
+                                f'<div style="padding:3px 0;font-size:12px;'
+                                f'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'
+                                f'<span style="display:inline-block;width:14px;height:14px;background:#EEEEEE;'
+                                f'color:#888;border-radius:3px;font-size:9px;font-weight:700;text-align:center;'
+                                f'line-height:14px;margin-right:5px;vertical-align:middle">C</span>'
+                                f'<strong>{c_title}</strong>'
+                                f'<span style="color:#999"> · cortina</span>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
+                        with add_col:
+                            if st.button("＋", key=f"srch_add_cor_{c_title}", use_container_width=True,
+                                         help="Add cortina to end of playlist"):
+                                entry = {
+                                    "type": "cortina",
+                                    "title": c_title,
+                                    "duration": "0:20",
+                                    "source": "user",
+                                }
+                                pq.items.append(entry)
+                                _save_pq(pq)
+                                _log(f'Added cortina "{c_title}" to playlist end.', "change")
+                                st.toast(f'Cortina "{c_title}" added to playlist.', icon="👤")
+                                st.rerun()
             else:
-                st.caption("Search to find and add songs.")
+                st.caption("Search to find and add songs or cortinas.")
 
 # ── Bottom: Library, Queue, Upload ──────────────────────────────────────────
 

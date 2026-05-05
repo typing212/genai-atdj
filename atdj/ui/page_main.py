@@ -438,6 +438,10 @@ def _sidebar():
                 key="sb_provider", label_visibility="collapsed",
             )
         provider = sel_provider
+        if provider != cur_provider:
+            # Provider changed — clear the key so user enters the correct one
+            st.session_state["s_api_key"] = ""
+            st.session_state["sb_api_key"] = ""
         st.session_state["s_provider"] = provider
 
         model_opts = PROVIDER_MODELS.get(provider, []) + ["Others"]
@@ -461,6 +465,11 @@ def _sidebar():
             placeholder=KEY_LABELS.get(provider, "API Key / Host"),
         )
         st.session_state["s_api_key"] = st.session_state.get("sb_api_key", "")
+
+        if provider == "Claude":
+            from atdj.config import GEMINI_API_KEY
+            if not GEMINI_API_KEY:
+                st.info("💡 Add **GEMINI_API_KEY** to .env to enable AI cortina generation via Lyria. Otherwise pool music will be used as fallback.", icon="🎵")
 
         if st.button("Save Settings", type="primary", use_container_width=True, key="sb_save"):
             st.toast("Settings saved.", icon="✅")
@@ -681,30 +690,46 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION""")])
                 if new_playlist and not is_full_session:
                     # Generate a closing cortina for single-tanda plans
                     from atdj.config import get_ui_api_key, get_ui_provider, GEMINI_API_KEY
+                    from atdj.cortina.generator import _summarize_tanda
+                    from atdj.cortina.pool import find_best_cortina
+                    from datetime import datetime as _dt
                     _provider = get_ui_provider()
                     _api_key = (get_ui_api_key() if _provider == "Gemini" else "") or GEMINI_API_KEY
-                    if _api_key and picked_per_tanda:
-                        from datetime import datetime as _dt
-                        try:
-                            from atdj.cortina.generator import generate_cortina
-                            from atdj.config import ROOT_DIR
-                            _cortina = generate_cortina(
-                                prev_tracks=picked_per_tanda[0],
-                                next_style=None,
-                                output_dir=ROOT_DIR / "data" / "cortinas" / "generated",
-                                api_key=_api_key,
-                            )
+                    if picked_per_tanda:
+                        if _api_key:
+                            try:
+                                from atdj.cortina.generator import generate_cortina
+                                from atdj.config import ROOT_DIR
+                                _cortina = generate_cortina(
+                                    prev_tracks=picked_per_tanda[0],
+                                    next_style=None,
+                                    output_dir=ROOT_DIR / "data" / "cortinas" / "generated",
+                                    api_key=_api_key,
+                                )
+                                new_playlist.append(_cortina)
+                                st.session_state.setdefault("agent_notifications", []).append({
+                                    "type": "info",
+                                    "text": f"🎵 CORTINA — Generated via Lyria ({_cortina.get('title', 'Cortina')})",
+                                    "timestamp": _dt.now().strftime("%H:%M:%S"),
+                                })
+                            except Exception as _e:
+                                # Lyria failed — fall back to pool
+                                _summary = _summarize_tanda(picked_per_tanda[0])
+                                _cortina = find_best_cortina(_summary)
+                                new_playlist.append(_cortina)
+                                st.session_state.setdefault("agent_notifications", []).append({
+                                    "type": "warning",
+                                    "text": f"🎵 CORTINA — Lyria failed, using pool ({_cortina.get('title', 'Cortina')})",
+                                    "timestamp": _dt.now().strftime("%H:%M:%S"),
+                                })
+                        else:
+                            # No Gemini key — use pool directly
+                            _summary = _summarize_tanda(picked_per_tanda[0])
+                            _cortina = find_best_cortina(_summary)
                             new_playlist.append(_cortina)
                             st.session_state.setdefault("agent_notifications", []).append({
                                 "type": "info",
-                                "text": f"🎵 CORTINA — Generated closing cortina via Lyria ({_cortina.get('title', 'Cortina')})",
-                                "timestamp": _dt.now().strftime("%H:%M:%S"),
-                            })
-                        except Exception as _e:
-                            new_playlist.append({"type": "cortina", "title": "Cortina", "duration": "0:20", "source": "agent"})
-                            st.session_state.setdefault("agent_notifications", []).append({
-                                "type": "warning",
-                                "text": f"🎵 CORTINA — Lyria generation failed, using placeholder ({_e})",
+                                "text": f"🎵 CORTINA — Selected from pool ({_cortina.get('title', 'Cortina')})",
                                 "timestamp": _dt.now().strftime("%H:%M:%S"),
                             })
 

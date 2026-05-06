@@ -17,8 +17,6 @@ AT-DJ has three chat modes (plus a cortina generator), all routed by an LLM clas
 
 Around the chat panel: a custom audio player with auto-advance and gap control, a Now Playing card, an energy-arc chart of the planned session, a structured session log, and a search panel for adding tracks manually.
 
-A 4-minute demo recording is in `doc/demo/_rehearsal_artifacts/` (gitignored — produced locally via `doc/demo/record_with_audio.py`).
-
 ---
 
 ## Quick start
@@ -61,8 +59,8 @@ You only need a key for the provider you intend to use; the other can be blank. 
 
 Place your audio files into:
 
-- `data/raw/` — tango / vals / milonga tracks
-- `data/cortinas/` — short cortina clips
+- `data/raw/` — tango / vals / milonga tracks ([sample collection on Google Drive](https://drive.google.com/file/d/1MAEvcM_fsU7Gx5tTIDKvM_tkkdJnukAE/view?usp=sharing); request access if needed)
+- `data/cortinas/` — short cortina clips ([sample collection on Google Drive](https://drive.google.com/file/d/1nSaDfduErWJ7CHPVYiv4mdobe8bs2XVc/view?usp=sharing); request access if needed)
 
 These directories are gitignored — files stay local. The accompanying catalog file at `data/essentia_newsamp.csv` describes each track's metadata and audio features and is used by the playback engine.
 
@@ -118,7 +116,7 @@ Manual controls (move tracks up/down, remove, add from the search panel, change 
 - **Schemas:** Pydantic v2 throughout (`atdj/schemas/`).
 - **LLM:** Anthropic Claude or Google Gemini, selected from the sidebar at runtime.
 
-For a full walk-through with diagrams, see [`doc/report/methodology.md`](doc/report/methodology.md). For the engineering blueprint and tech-stack rationale, see [`doc/BLUEPRINT.md`](doc/BLUEPRINT.md).
+For the engineering blueprint and tech-stack rationale, see [`doc/BLUEPRINT.md`](doc/BLUEPRINT.md).
 
 ---
 
@@ -128,6 +126,7 @@ For a full walk-through with diagrams, see [`doc/report/methodology.md`](doc/rep
 atdj/
   agent/          LangGraph nodes, edges, shared state, tools
   audio/          DSP pipeline + chat-driven adjustment subgraph
+  cortina/        Cortina pool fallback and Lyria-based generator
   rag/            ChromaDB ingest, retrieval, Q&A, prompt translation
   schemas/        Pydantic models (Track, Tanda, FeedbackEvent, ...)
   ui/             Streamlit pages, custom audio player, layout
@@ -144,7 +143,6 @@ doc/
   BLUEPRINT.md         Engineering plan, module breakdown, tech stack
   knowledge/           Decision-log entries (LangGraph vs alternatives, etc.)
   report/              Draft report sections (methodology, ...)
-  changes_after_merge.md   Post-merge integration notes
 tests/                  ~399 tests; see tests/README.md
 main.py                 App entry point
 ```
@@ -164,10 +162,9 @@ Skip integration tests (which call out to a real LLM) with `-m "not integration"
 ## Documentation
 
 - [`doc/BLUEPRINT.md`](doc/BLUEPRINT.md) — engineering plan, module breakdown, current status, and tech-stack decisions.
-- [`doc/report/methodology.md`](doc/report/methodology.md) — methodology draft for the project report (UI surface → agent architecture → audio enhancement deep dive).
-- [`doc/knowledge/`](doc/knowledge/) — short decision-log entries (why LangGraph, why ChromaDB, librosa vs essentia, future-work backlog, etc.).
 - [`tests/UI_TEST_GUIDE.md`](tests/UI_TEST_GUIDE.md) — manual end-to-end test scenarios with measured latencies.
 - [`atdj/schemas/README.md`](atdj/schemas/README.md) — field-by-field schema reference.
+- [`doc/report/ai_usage.md`](doc/report/ai_usage.md) — disclosure of AI tool usage during the project.
 
 ---
 
@@ -175,22 +172,9 @@ Skip integration tests (which call out to a real LLM) with `-m "not integration"
 
 Built as a course project for **STAT GR5293 — GenAI Systems**, Columbia University, Spring 2026.
 
-- **Shichen (Tina) Ma** (sm5917) — agent core, full-session planner, cortina generation
-- **Yuhan (Nancy) Ma** (ym3124) — RAG pipeline, Q&A subgraph, tanda selection
-- **Nuoxi (Vanessa) Zhong** (nz2448) — UI integration, audio enhancement subgraph, evaluation harness
-
-## Screenshots
-
-> Placeholder — drop final captures into `doc/report/figures/` and reference them here.
-
-```
-doc/report/figures/
-  ui_overview.png       — full app layout (sidebar collapsed, four panels visible)
-  plan_in_flight.png    — planning a full session, "Planning your session…" placeholder
-  adjust_menu.png       — rejection-menu after "Make this song louder"
-  energy_arc.png        — energy arc chart with played vs upcoming dots
-  session_log.png       — colour-coded session log with summary entries
-```
+- **Shichen (Tina) Ma** (sm5917)
+- **Yuhan (Nancy) Ma** (ym3124)
+- **Nanhai (Vanessa) Zhong** (nz2448)
 
 ## License & credits
 

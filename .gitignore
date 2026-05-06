@@ -48,6 +48,9 @@ doc/demo/_rehearsal_artifacts/
 # Vanessa's report workspace (LaTeX source, build artifacts, PDF, slide drafts) — local only
 doc/report/V/
 
+# Methodology draft — local only
+doc/report/methodology.md
+
 # Claude Code local settings (machine-specific permissions)
 .claude/settings.local.json
 

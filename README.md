@@ -8,13 +8,16 @@ An AI-powered DJ assistant for Argentine Tango milongas. AT-DJ plans tanda and c
 
 ## What it does
 
-AT-DJ has three chat modes, all routed by an LLM classifier behind a single chat box:
+AT-DJ has three chat modes (plus a cortina generator), all routed by an LLM classifier behind a single chat box:
 
-- **PLAN** — describe a session in plain English ("plan a relaxed Di Sarli tango tanda, then a more dramatic Pugliese tanda") and the agent picks tracks from your catalog, slots in cortinas between tandas, and publishes the playlist.
-- **ADJUST_AUDIO** — adjust the sound of upcoming tracks by chat ("the next tanda is too harsh", "a bit louder", "back to default"). The agent measures the currently-playing track as a reference and applies a relative correction to the upcoming tanda. The currently-playing track itself is read-only.
+- **PLAN** — describe a session in plain English ("plan a relaxed Di Sarli tango tanda, then a more dramatic Pugliese tanda") and the agent picks tracks from your catalog, slots in cortinas between tandas, and publishes the playlist. A full-session prompt (e.g. "plan a full milonga session, romantic 1940s") triggers a six-slot schema (Tango Tango Vals Tango Tango Milonga) with combo-key uniqueness across the set.
+- **Audio Enhancement** — adjust the sound of upcoming tracks by chat ("the next tanda is too harsh", "a bit louder", "back to default"). The agent measures the currently-playing track as a reference and applies a relative correction to the upcoming tanda. The currently-playing track itself is read-only.
 - **Q&A** — ask about orchestras, singers, eras, terminology — answered through retrieval over a curated tango knowledge base plus Wikipedia fallback.
+- **CORTINA generation** — between tandas, the agent either picks the best-matching clip from a backup pool or has the LLM craft a music prompt and synthesises a fresh 25-second cortina via Lyria. Pool is the deterministic safe fallback when generation fails.
 
 Around the chat panel: a custom audio player with auto-advance and gap control, a Now Playing card, an energy-arc chart of the planned session, a structured session log, and a search panel for adding tracks manually.
+
+A 4-minute demo recording is in `doc/demo/_rehearsal_artifacts/` (gitignored — produced locally via `doc/demo/record_with_audio.py`).
 
 ---
 
@@ -109,7 +112,7 @@ Manual controls (move tracks up/down, remove, add from the search panel, change 
 ## How it works (high level)
 
 - **UI:** Streamlit, with a custom HTML/JS audio player so playback isn't interrupted by Streamlit reruns.
-- **Agent:** [LangGraph](https://github.com/langchain-ai/langgraph). One classifier routes messages into one of three subgraphs (PLAN / ADJUST_AUDIO / Q&A). State is shared via a typed `AgentState`.
+- **Agent:** [LangGraph](https://github.com/langchain-ai/langgraph). One classifier routes messages into one of three subgraphs (PLAN / Audio Enhancement / Q&A). State is shared via a typed `AgentState`.
 - **RAG:** [ChromaDB](https://www.trychroma.com/) over the track catalog and a curated tango knowledge base, with Wikipedia as a secondary source for Q&A.
 - **Audio enhancement:** a five-stage DSP chain (noise reduction → 3-band EQ → LUFS normalization → limiter → dynamic hiss filter) implemented with `noisereduce`, `pedalboard`, and `pyloudnorm`. Per-track parameters are computed from a tanda-wide spectral and SNR analysis so tracks sound consistent as a group.
 - **Schemas:** Pydantic v2 throughout (`atdj/schemas/`).
@@ -168,6 +171,27 @@ Skip integration tests (which call out to a real LLM) with `-m "not integration"
 
 ---
 
+## Authors
+
+Built as a course project for **STAT GR5293 — GenAI Systems**, Columbia University, Spring 2026.
+
+- **Shichen (Tina) Ma** (sm5917) — agent core, full-session planner, cortina generation
+- **Yuhan (Nancy) Ma** (ym3124) — RAG pipeline, Q&A subgraph, tanda selection
+- **Nuoxi (Vanessa) Zhong** (nz2448) — UI integration, audio enhancement subgraph, evaluation harness
+
+## Screenshots
+
+> Placeholder — drop final captures into `doc/report/figures/` and reference them here.
+
+```
+doc/report/figures/
+  ui_overview.png       — full app layout (sidebar collapsed, four panels visible)
+  plan_in_flight.png    — planning a full session, "Planning your session…" placeholder
+  adjust_menu.png       — rejection-menu after "Make this song louder"
+  energy_arc.png        — energy arc chart with played vs upcoming dots
+  session_log.png       — colour-coded session log with summary entries
+```
+
 ## License & credits
 
-Academic project — Columbia GenAI Spring 2026. Music and recordings remain the property of their respective rights holders; the system runs only against music you have provided yourself.
+Academic project — Columbia GenAI, Spring 2026. Source code and documentation in this repository are the authors' work and may be reused for academic purposes with attribution. Music and recordings used during development remain the property of their respective rights holders; the system runs only against music you have provided yourself, and no music is shipped in this repository.

@@ -29,7 +29,7 @@
 
 ---
 
-### Dependency Map and Status (as of 2026-05-03)
+### Dependency Map and Status (as of 2026-05-05)
 
 | WP | Name | Depends On | Status |
 |---|---|---|---|
@@ -37,13 +37,13 @@
 | WP-02 | Audio Feature Extraction & Catalog Bootstrap | WP-01 | Done (librosa pipeline; essentia is out of scope on Windows — see WP-02 below) |
 | WP-03 | Static UI Wireframe | WP-01 (minimal) | Done |
 | WP-04 | Basic Playback Engine | WP-01 | Done |
-| WP-05 | Tanda Validator & Energy Arc | WP-01, WP-02 | Done (style homogeneity at the schema layer; orchestra/decade homogeneity left as soft rules — see `doc/future_work.md` §4 for the deferred convention vs flexible mode) |
-| WP-06 | LangGraph Agent Core | WP-01, WP-02, WP-05 | Done (PLAN, ADJUST_AUDIO, Q&A subgraphs all wired) |
+| WP-05 | Tanda Validator & Energy Arc | WP-01, WP-02 | Done (style homogeneity at the schema layer; orchestra/decade homogeneity left as soft rules — see `doc/report/future_work.md` §4 for the deferred convention vs flexible mode) |
+| WP-06 | LangGraph Agent Core | WP-01, WP-02, WP-05 | Done (PLAN, Audio Enhancement, Q&A subgraphs all wired). Full-session planner (`atdj/rag/plan_set.py`) extends the single-tanda planner with a fixed style schema (Tango Tango Vals Tango Tango Milonga) and combo-key uniqueness across the set. |
 | WP-07 | ChromaDB Ingest & RAG | WP-01 | Done |
-| WP-08 | Audio Enhancement Pipeline | WP-01 | Done — extended with the chat-driven ADJUST_AUDIO subgraph in `atdj/audio/adjustment_graph.py` |
-| WP-09 | Cortina Generation & Selection | WP-01 | Selection: Done (backup pool). Generation: In progress. |
+| WP-08 | Audio Enhancement Pipeline | WP-01 | Done — extended with the chat-driven Audio Enhancement subgraph in `atdj/audio/adjustment_graph.py` |
+| WP-09 | Cortina Generation & Selection | WP-01 | Done. Selection: backup pool in `atdj/cortina/pool.py` scores BPM and energy similarity to the preceding tanda; generation: `atdj/cortina/generator.py` summarises the preceding tanda (style, mood, energy, BPM), has the LLM craft a music prompt (no bandoneon, no tango compás, energy/BPM matched, randomised genre pick), and calls Lyria for a 25 s WAV. Pool is the deterministic safe fallback when generation fails or no Gemini key is present. |
 | WP-10 | Full UI Integration | WP-03, WP-04, WP-06, WP-07 (core); WP-08, WP-09 (nice-to-have) | Done |
-| WP-11 | Evaluation & Demo Prep | WP-10 | In progress (5-min demo script and methodology draft tracked in `doc/todo.md`) |
+| WP-11 | Evaluation & Demo Prep | WP-10 | In progress — 4-min demo script, speech, and Playwright harness in `doc/demo/`; methodology draft and final-paper outline in `doc/report/`; pending: final-report writing, slide-deck consolidation, end-to-end ablation runs. |
 
 ---
 
@@ -173,7 +173,7 @@ generous whitespace, one accent color (`#8B1A1A`, deep burgundy), card layouts w
 ---
 
 ### WP-06: LangGraph Agent Core
-**Deliverable:** Agent plans a 6-tanda mini-session without UI, results logged to stdout
+**Deliverable:** Agent plans a 6-tanda mini-session without UI, results logged to stdout. Single-tanda planning is invoked through `atdj/rag/select_tanda.py`; multi-tanda full-session planning through `atdj/rag/plan_set.py`.
 
 **Est. Effort:** ~18 hrs (without AI: 2–3×) · Week 3 (4/5–4/11)
 
@@ -183,11 +183,12 @@ generous whitespace, one accent color (`#8B1A1A`, deep burgundy), card layouts w
 
 **Detailed Tasks:**
 - Implement `atdj/agent/state.py` — `AgentState` TypedDict
-- Implement all tools in `atdj/agent/tools.py` (wire to `rag/query`, `tanda/validator`, `tanda/energy`)
+- Implement all tools in `atdj/agent/tools.py` (wire to `rag/query`, `tanda/validator`, `tanda/energy`, `rag/select_tanda`, `rag/plan_set`, `cortina/pool`, `cortina/generator`)
 - Implement all node functions in `atdj/agent/nodes.py`:
   `session_init`, `tanda_planner`, `cortina_selector`, `queue_publisher`, `feedback_handler`, `session_summary`
 - Implement `atdj/agent/edges.py` — routing functions
 - Implement `atdj/agent/graph.py` — `build_graph()` returning compiled `StateGraph`
+- Two-layer prompt translation in `atdj/rag/prompt_to_features.py` (regex for year/decade, LLM for orchestra/style/bpm/energy/tags), called once per planning session and re-used across slots in `plan_set.py` so a 6-tanda session pays only one LLM translation cost.
 - Write `tests/test_agent.py` — mock LLM responses, assert state transitions correct
 
 ---
@@ -245,16 +246,21 @@ generous whitespace, one accent color (`#8B1A1A`, deep burgundy), card layouts w
 **Depends on:** WP-01
 
 **Cortina pool design:**
-- **Backup pool:** all pre-existing music in `data/cortinas/` — files labeled "Cortina" in the filename and non-tango pop/jazz clips are all treated equally as backup cortinas.
-- **Generated:** purpose-built transition clips (short, neutral, designed for milonga use) that supplement the backup pool.
+- **Backup pool:** pre-existing music in `data/cortinas/pool/` — non-tango pop/jazz/etc. clips. Indexed once into `data/cortinas/pool_features.csv` (BPM and normalised RMS energy per file).
+- **Generated:** Lyria-synthesised 25 s clips, prompted by an LLM-crafted music description derived from the preceding tanda's style, mood, energy label, and average BPM.
 
-**Proof of Concept Test** (`notebooks/09_cortina_selection.ipynb`): call `select_cortina_from_pool()` after a hardcoded Vals tanda, print contrast scores for each candidate, play the top-scored cortina with `IPython.display.Audio`. Confirm the selection logic prefers contrasting clips.
+**Proof of Concept Test** (`notebooks/09_cortina_selection.ipynb`): call `find_best_cortina()` from `atdj/cortina/pool.py` after a hardcoded Vals tanda, print BPM/energy distance to each candidate, play the top-scored cortina with `IPython.display.Audio`. Confirm the selection logic prefers BPM- and energy-matched clips.
 
-**Detailed Tasks:**
-- Implement `atdj/audio/cortina.py`:
-  - `select_cortina_from_pool()` — score clips in `data/cortinas/` by energy contrast + spectral contrast vs. preceding tanda, trim to 20–30s with pydub
-  - `generate_cortina_by_splice()` — splice 2–3 non-tango clips with 500ms crossfade to produce a fresh transition clip
-- Wire `select_cortina` and `generate_cortina` tools in `atdj/agent/tools.py`
+**Detailed Tasks (status: done):**
+- `atdj/cortina/pool.py`:
+  - `build_pool_features()` — extracts BPM (librosa beat track) and normalised RMS energy for every mp3/wav in `data/cortinas/pool/`, persisted to `data/cortinas/pool_features.csv`.
+  - `find_best_cortina(tanda_summary, exclude)` — picks the pool song that minimises BPM-energy distance to the preceding tanda summary; respects an exclusion list to avoid repeats across a session.
+- `atdj/cortina/generator.py`:
+  - `_summarize_tanda()` — derives style (mode), orchestra, decade, average energy/BPM, and a derived mood label from the preceding tanda's tracks.
+  - `_craft_music_prompt()` — LLM call (Gemini/Claude/OpenAI per UI sidebar) that produces a 2–3 sentence music-generation prompt under hard rules: pick one genre at random from a curated list (jazz, bossa nova, soul, funk, pop, electronic, classical, blues, reggae, cinematic orchestra, lo-fi); no bandoneon; no tango compás; energy and BPM must match the tanda.
+  - `_call_lyria()` — streams audio bytes from Google's `lyria-3-clip-preview` model; writes the resulting WAV to `output_dir`.
+  - `generate_cortina(prev_tracks, next_style, output_dir, api_key)` — public entry point used by the `cortina_selector` agent node; falls back to `find_best_cortina()` if generation fails or `GEMINI_API_KEY` is missing.
+- Tools wired in `atdj/agent/tools.py`; selection vs generation chosen at the node level based on key availability and the selector's failure handling.
 
 ---
 
@@ -322,8 +328,8 @@ generous whitespace, one accent color (`#8B1A1A`, deep burgundy), card layouts w
 | Cortina placement | Every tanda pair in the published queue is separated by a cortina. |
 | RAG Q&A functional | Tango knowledge questions return grounded answers via local-knowledge-first → Wikipedia fallback retrieval. |
 | Audio enhancement functional | Pipeline produces an enhanced WAV with SNR improvement ≥ +5 dB over raw on the test signal (verified by `tests/test_audio_enhancement/test_enhancement.py`). |
-| Chat-driven audio adjustment | Cover the ten ADJUST_AUDIO scenarios documented in the methodology (happy path, clarification, cancel, current-track read-only menu, no-targets, reset, off-topic interrupt, free-form non-option reply, unsupported feature, fallback on missing file). |
-| UI complete | Single Streamlit page loads cleanly with all panels visible (Now Playing, Energy Arc, Full Playlist, Chat, Session Log, Search) and the chat classifier routes correctly into PLAN / ADJUST_AUDIO / Q&A. |
+| Chat-driven audio adjustment | Cover the ten Audio Enhancement scenarios documented in the methodology (happy path, clarification, cancel, current-track read-only menu, no-targets, reset, off-topic interrupt, free-form non-option reply, unsupported feature, fallback on missing file). |
+| UI complete | Single Streamlit page loads cleanly with all panels visible (Now Playing, Energy Arc, Full Playlist, Chat, Session Log, Search) and the chat classifier routes correctly into PLAN / Audio Enhancement / Q&A. |
 
 ### Quality Criteria
 
@@ -332,7 +338,7 @@ generous whitespace, one accent color (`#8B1A1A`, deep burgundy), card layouts w
 | Audio LUFS landing | Each enhanced track lands within ±6 LU of the −14 LUFS target (`tests/test_audio_enhancement/test_enhancement.py::test_lufs_near_target`). |
 | Test suite | ~399 tests collected; the pure-logic subset passes without an LLM API key. |
 | PLAN latency | A single-tanda PLAN completes in under ~10s on Claude with a warm cache (per `tests/UI_TEST_GUIDE.md`). |
-| ADJUST_AUDIO latency | First-turn routing + parsing in under ~20s on Claude; subsequent menu-pick turns in under ~12s. |
+| Audio Enhancement latency | First-turn routing + parsing in under ~20s on Claude; subsequent menu-pick turns in under ~12s. |
 | Q&A latency | Tango-knowledge questions in under ~20s on Claude (Gemini path is markedly slower and is documented as such). |
 
 ### Reproducibility Criteria
@@ -351,7 +357,7 @@ Mapped to the official rubric in `doc/course/Project_Rubric_STATGR5293_2026.pdf`
 
 | Category | How Met |
 |---|---|
-| **Project Proposal — Clarity of Objectives (4%)** | Three-mode tango-DJ assistant (PLAN, ADJUST_AUDIO, Q&A); scope mirrored in BLUEPRINT and README. |
+| **Project Proposal — Clarity of Objectives (4%)** | Three-mode tango-DJ assistant (PLAN, Audio Enhancement, Q&A); scope mirrored in BLUEPRINT and README. |
 | **Project Proposal — Feasibility (3%)** | 5-week / 3-person timeline with deferred items listed in `doc/future_work.md`; essentia blocker mitigated by librosa. |
 | **Project Proposal — Innovation and Relevance (3%)** | Chat-driven audio adjustment with current-track read-only enforcement; ten enumerated corner cases. |
 | **Presentation — Problem Statement (10%)** | Framing in methodology §1–§2; ready for slides. |
@@ -362,8 +368,8 @@ Mapped to the official rubric in `doc/course/Project_Rubric_STATGR5293_2026.pdf`
 | **Final Report — Methodology (8%)** | `doc/report/methodology.md` — top-down architecture, diagrams, ten-scenario coverage. |
 | **Final Report — Results and Analysis (6%)** | Targets from quality criteria, measured numbers from tests + UI_TEST_GUIDE; pair them in the results section. |
 | **Final Report — Grammar and Writing Quality (3%)** | Final pass before submission; methodology already in report-style prose. |
-| **Demo — Live Demo Quality (7%)** | Latency-grounded 5-min script with fallbacks (`todo.md` Task 2). |
-| **Demo — Interactivity and Engagement (6%)** | Live PLAN → ADJUST_AUDIO → Q&A walkthrough; Q&A rehearsed via spotlight scenarios. |
+| **Demo — Live Demo Quality (7%)** | Latency-grounded 4-min script with fallbacks (`doc/demo/proposal_for_demo.md`, `doc/demo/speech.md`, Playwright harness in `doc/demo/demo_script.py`). |
+| **Demo — Interactivity and Engagement (6%)** | Live PLAN → Audio Enhancement → Q&A walkthrough; Q&A rehearsed via spotlight scenarios. |
 | **Demo — Technical Depth (7%)** | Narration ties on-screen actions to the methodology diagrams; ten-scenario coverage as talking point. |
 | **GitHub — Repository Quality (5%)** | Modular `atdj/*` packages, Pydantic schemas, ~399 tests, README + BLUEPRINT + methodology + knowledge docs, clean commits. |
 | **GitHub — Reproducibility (5%)** | `uv sync`, `.env.example`, documented ingest + launch, offline test subset (`-m "not integration"`). |

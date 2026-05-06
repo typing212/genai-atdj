@@ -15,8 +15,21 @@ from atdj.agent.edges import (
 )
 
 
+_compiled_graph_cache = None
+
+
 def build_graph():
-    """Build and compile the LangGraph agent."""
+    """Build and compile the LangGraph agent.
+
+    Memoised at module level — the compiled `StateGraph` is stateless across
+    chat turns (state lives in the per-call `AgentState` typed dict, not on
+    the graph). Compiling takes ~50-150ms; caching it saves that on every
+    chat turn after the first.
+    """
+    global _compiled_graph_cache
+    if _compiled_graph_cache is not None:
+        return _compiled_graph_cache
+
     graph = StateGraph(AgentState)
 
     # Add all nodes
@@ -61,4 +74,5 @@ def build_graph():
     )
     graph.add_edge("session_summary", END)
 
-    return graph.compile()
+    _compiled_graph_cache = graph.compile()
+    return _compiled_graph_cache

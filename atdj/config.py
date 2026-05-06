@@ -61,19 +61,35 @@ def get_ui_model() -> str:
     return CLAUDE_MODEL if provider == "Claude" else GEMINI_MODEL
 
 
+# Module-level memo for LLM clients. Keyed on (provider, model, api_key) so a
+# sidebar change still produces a fresh client. Each call to a chat workflow
+# would otherwise re-construct the LangChain client (TLS handshake on first
+# request, ~0.5-2s); caching it amortises that across the session.
+_llm_client_cache: dict[tuple[str, str, str], object] = {}
+
+
 def get_ui_llm():
     """Return a LangChain LLM instance for the provider and key selected in the UI.
 
     Returns ChatAnthropic for Claude, ChatGoogleGenerativeAI for Gemini.
     Falls back gracefully to .env values when called outside Streamlit.
+    Memoised on (provider, model, api_key) — see `_llm_client_cache`.
     """
     provider = get_ui_provider()
     model = get_ui_model()
     api_key = get_ui_api_key()
 
+    cache_key = (provider, model, api_key)
+    cached = _llm_client_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     if provider == "Claude":
         from langchain_anthropic import ChatAnthropic
-        return ChatAnthropic(model=model, anthropic_api_key=api_key, temperature=0)
+        client = ChatAnthropic(model=model, anthropic_api_key=api_key, temperature=0)
+    else:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        client = ChatGoogleGenerativeAI(model=model, google_api_key=api_key)
 
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    return ChatGoogleGenerativeAI(model=model, google_api_key=api_key)
+    _llm_client_cache[cache_key] = client
+    return client

@@ -690,8 +690,17 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION"""
                                 "timestamp": _dt.now().strftime("%H:%M:%S"),
                             })
                             return _cor
-                        except Exception:
-                            pass
+                        # except Exception:                       # original (silent — masked the failure cause)
+                        #     pass
+                        except Exception as _ex:
+                            # Surface the failure in the agent notifications so
+                            # the Session Log shows what went wrong (rate limit,
+                            # bad key, model unavailable, etc.).
+                            st.session_state.setdefault("agent_notifications", []).append({
+                                "type": "warning",
+                                "text": f"🎵 CORTINA — Lyria failed ({_ex.__class__.__name__}: {str(_ex)[:200]}); falling back to pool.",
+                                "timestamp": _dt.now().strftime("%H:%M:%S"),
+                            })
 
                     # 2. Try pool
                     try:
@@ -716,7 +725,7 @@ Reply with one word only: PLAN, ADJUST_AUDIO, or QUESTION"""
 
                 # ── Full-session path: use plan_set ────────────────────────────
                 if is_full_session:
-                    _reply_slot.markdown("_Planning full set via plan_set..._")
+                    _reply_slot.markdown("_Planning your full session..._")
 
                     catalog_df = _get_rag_catalog()
                     _provider_name = get_ui_provider().lower()
@@ -1347,10 +1356,16 @@ def _section_music():
                     # ⏭/⏮). Until then the iframe renders with controls but no
                     # autoplay, so a fresh PLAN doesn't blast music.
                     _autoplay_ok = bool(st.session_state.get("playback_initiated", False))
+                    # is_last_track: when the very last item in the playlist
+                    # ends, the iframe must NOT auto-advance — that fires a
+                    # ⏭ click which reruns Streamlit and can interrupt an
+                    # in-flight agent task (e.g. fresh PLAN/Q&A).
+                    _is_last = pq.current_index >= len(pq.items) - 1
                     render_audio_player(
                         file_path, gap_seconds=effective_gap,
                         max_duration=max_dur, fade_in_seconds=2.0,
                         autoplay=_autoplay_ok,
+                        is_last_track=_is_last,
                     )
                 else:
                     _autoskip_html = f"""

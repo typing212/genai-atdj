@@ -13,6 +13,17 @@ _CSS = """
 #MainMenu, footer { visibility: hidden; }
 [data-testid="stDeployButton"],
 [data-testid="stToolbarActions"] { display: none; }
+/* Hide Streamlit's "Running..." / status spinner shown during reruns.
+   Not custom code — framework-level overlay. We've used it for debugging,
+   but during demos it appears as a tiny loading circle (often near the
+   chat input or top-right of the toolbar) which is visually distracting. */
+[data-testid="stStatusWidget"],
+[data-testid="stStatusWidget"] *,
+[class*="stStatus"],
+[class*="StatusWidget"] {
+    display: none !important;
+    visibility: hidden !important;
+}
 /* Ensure sidebar re-open button always shows */
 [data-testid="stSidebarCollapsedControl"],
 [data-testid="stSidebarCollapsedControl"] * { visibility: visible !important; display: flex !important; }

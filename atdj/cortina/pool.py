@@ -22,7 +22,8 @@ import pandas as pd
 
 from atdj.config import ROOT_DIR
 
-POOL_DIR      = ROOT_DIR / "data" / "cortinas" / "pool"
+# POOL_DIR    = ROOT_DIR / "data" / "cortinas" / "pool"   # original — subdir doesn't exist on this machine
+POOL_DIR      = ROOT_DIR / "data" / "cortinas"            # actual location of pool clips
 FEATURES_CSV  = ROOT_DIR / "data" / "cortinas" / "pool_features.csv"
 
 
@@ -53,9 +54,13 @@ def build_pool_features(force: bool = False) -> pd.DataFrame:
             # Normalise energy to 0-1 range (typical rms is 0.01-0.3)
             energy_norm = min(energy / 0.3, 1.0)
             rows.append({"filename": f.name, "file_path": str(f), "bpm": round(bpm, 1), "energy": round(energy_norm, 3)})
-            print(f"  ✓ {f.name}  BPM={bpm:.0f}  energy={energy_norm:.2f}")
+            # Original used U+2713 / U+2717 which crash Windows cp1252 stdout
+            # — replaced with ASCII so the build doesn't raise UnicodeEncodeError
+            # (which then propagates to find_best_cortina and forces the
+            # empty-pool placeholder, hiding real cortina filenames).
+            print(f"  [OK] {f.name}  BPM={bpm:.0f}  energy={energy_norm:.2f}")
         except Exception as e:
-            print(f"  ✗ {f.name}: {e}")
+            print(f"  [FAIL] {f.name}: {e}")
 
     df = pd.DataFrame(rows)
     FEATURES_CSV.parent.mkdir(parents=True, exist_ok=True)

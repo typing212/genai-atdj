@@ -68,6 +68,17 @@ class PlaybackQueue:
     def stop(self) -> None:
         self._is_playing = False
 
+    def clear(self) -> None:
+        """Empty the playlist and reset the cursor / playing flag.
+
+        Called by the 'Clear' button in the Full Playlist section
+        (`page_main.py:1525`). Was previously missing — clicking Clear raised
+        AttributeError and crashed the page.
+        """
+        self._items = []
+        self._current_index = 0
+        self._is_playing = False
+
     def play_pause(self) -> bool:
         self._is_playing = not self._is_playing
         return self._is_playing

@@ -476,7 +476,8 @@ def clarify_node(state: AdjustmentState) -> dict:
 def reject_current(state: AdjustmentState) -> dict:
     options = [
         "Apply to all songs after this one (rest of session)",
-        "Apply to the next tanda only",
+        # "Apply to the next tanda only",  # original — DSP on 4 tango tracks (~80s)
+        "Apply to the next song only",  # narrower scope, DSP on 1 track (~25s) — demo-friendly
         "Cancel",
     ]
     opts_text = "\n".join(f"{i+1}. {o}" for i, o in enumerate(options))

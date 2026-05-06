@@ -11,6 +11,7 @@ def render_audio_player(
     max_duration: float | None = None,
     fade_in_seconds: float = 2.0,
     autoplay: bool = True,
+    is_last_track: bool = False,
 ) -> None:
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
@@ -18,6 +19,12 @@ def render_audio_player(
 
     max_dur_js = f"{max_duration}" if max_duration else "null"
     gap_ms = int(gap_seconds * 1000)
+    # When the last track in the playlist ends, NEVER auto-advance: the
+    # ⏭ click would rerun Streamlit, which can interrupt an in-flight agent
+    # task (e.g. the user kicked off PLAN/Q&A right before the last track
+    # finished). With is_last_track=True the audio just stops at the end —
+    # the user can manually advance later if they add more content.
+    is_last_js = "true" if is_last_track else "false"
     # 2026-05-01 (Test 7.9): autoplay is now opt-in. Caller passes False on the
     # first iframe render after a fresh PLAN so the user must click ▶ to start.
     # Once they do, the page rerun sets the session flag → caller passes True →
@@ -44,6 +51,7 @@ def render_audio_player(
     const bakedMaxDur = {max_dur_js};
     const bakedGapMs = {gap_ms};
     const fadeIn = {fade_in_seconds};
+    const isLastTrack = {is_last_js};
 
     function _readTopVar(name) {{
         // Try window.top first (Streamlit may nest iframes), fall back to window.parent.
@@ -120,7 +128,23 @@ def render_audio_player(
         }});
     }}
 
-    audio.onended = () => {{ advance(); }};
+    audio.onended = () => {{
+        // If this is the last track in the playlist, do NOT auto-advance.
+        // The ⏭ click would trigger a Streamlit rerun, which can interrupt
+        // an in-flight agent task (a fresh PLAN/Q&A request).
+        if (isLastTrack) {{ return; }}
+        advance();
+    }};
+
+    // Allow the parent window (or harness) to pause this iframe's audio
+    // via postMessage. Used by the demo harness to silence music after
+    // pre-warm without clearing the playlist (cross-origin iframes block
+    // direct audio.pause() from the parent).
+    window.addEventListener('message', (e) => {{
+        if (e.data === 'atdj-pause') {{
+            try {{ audio.pause(); audio.currentTime = 0; }} catch (err) {{}}
+        }}
+    }});
     </script>
     """
     components.html(html, height=42)

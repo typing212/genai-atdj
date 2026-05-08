@@ -104,6 +104,7 @@ A typical session:
 5. **Inspect the session log** — every agent action and every user action is timestamped and colour-coded. The full log is also saved as JSON to `data/log/`.
 
 Manual controls (move tracks up/down, remove, add from the search panel, change transition or cortina length) are always available alongside the chat.
+If you want to see our demo, you can check it out here: ([Demo](https://drive.google.com/file/d/184KKkalDu6b6xZBD-Umu6_u5RX0L1VJl/view?usp=drive_link)
 
 ---
 

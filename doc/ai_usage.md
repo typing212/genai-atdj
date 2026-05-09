@@ -220,3 +220,47 @@ The following sub-prompts were given across several rounds:
 **Generated:** LaTeX structure content for all sections, including figures, tables, and prose grounded in the actual implementation. Grammar and logic suggestions. 
 
 **Manual edits:** Yes — wrote based on the structure and reviewed all generated content against the source code, corrected inaccuracies, adjusted figure layout, and made final wording decisions after grammar and logic checking.
+
+---
+
+### 16. Pipeline Debugging (`debug_one_tanda.py`, `debug_plan_set.py`, `debug_select_tanda.py`)
+
+**Prompt (reconstructed):**
+> Our pipeline runs silently end-to-end through `query.py`, `fetch.py`, `ingest.py`, `select_tanda.py`, `plan_set.py`, `store.py`, and `prompt_to_features.py`. Please help write a debugging version of each script that prints and verbalizes every step in detail: what data is loaded, what the LLM returns, what gets filtered and why, how many tracks pass each stage, what scores are assigned, and which combo_key is selected. Each step should be clearly labeled and timed so we can trace failures and regressions without a debugger.
+
+**Generated:** `debug_one_tanda.py` — full end-to-end pipeline trace for a single tanda prompt, printing step-by-step output from catalog load → Layer 1 regex → Layer 2 LLM → hard filter → soft filter → scoring → tanda grouping, with per-step elapsed time. `debug_plan_set.py` — traces the full session plan (multiple tandas + cortinas). `debug_select_tanda.py` — isolated trace for the `select_tanda` module with filter counts and score breakdowns.
+
+**Manual edits:** Yes — added fallback display when LLM key is missing (shows "regex-only bundle"), adjusted column display widths for readability, and added the `example_steps.md` example output file showing a real run trace.
+
+---
+
+### 17. Evaluation Suite (`eval_00_run_all.py` through `eval_04_tanda_quality.py`)
+
+**Prompt (reconstructed):**
+> We have a set of unit tests (`test_cache_catalog.py`, `test_answer_feature.py`, `test_query_track_retrieval.py`, `test_answer_question_real.py`, `test_search_for_planning.py`, `test_answer_question_smoke.py`, `test_fetch_simple.py`, `test_cache_features_ranges.py`, `test_cache_llm_translation.py`, `test_fetch_complex.py`). Please help me combine and scale them into a sequenced evaluation suite covering four dimensions: (1) pipeline end-to-end comparison against our COT notebooks (`02a_COT_FeaturePrep.ipynb`, `02b_COT_ComboAverageBestTanda.ipynb`, `02c_COT_Analysis_ComboAverageBestTanda.ipynb`), (2) Q&A accuracy and latency, (3) caching benchmark across all cache layers, and (4) tanda quality deep-dive. The master runner `eval_00_run_all.py` should call all four and generate a report-ready Markdown summary. Also hard-code the COT notebook results (from 02a, 02b, 02c) as comparison baselines inside the eval scripts.
+
+**Generated:** `eval_00_run_all.py` (master runner with `--quick` and `--no-llm` flags), `eval_01_pipeline_comparison.py` (vs COT baselines), `eval_02_qa_accuracy_latency.py` (pass rate, hallucination rate, latency by category), `eval_03_caching_benchmark.py` (cold/warm/speedup per cache layer), `eval_04_tanda_quality.py` (tanda structural validity, score distributions). Output JSON files + `eval_summary.md`.
+
+**Manual edits:** Yes — actual prompts used for testing, pass/fail conditions, COT comparison values (mean latency 8.90s, out-of-bounds rate 25%) hard-coded from notebook runs, category labels for Q&A grouping, and cache speedup thresholds tuned based on observed results.
+
+---
+
+### 18. Image / Visualization Generation for Slides and Report
+
+**Prompt (reconstructed):**
+> Could you please help me convert these contents into a structured image/visualization: [content block]. Example: the 7-step pipeline — Natural Language Prompt → Layer 1 Regex (extracts year/decade) → Layer 2 LLM (maps prompt to orchestra, style, bpm, energy, tags) → Hard Filter (style, decade, orchestra, singer) → Soft Filter (bpm_label, energy, key, danceability) → Score & Rank (bpm, danceability, chord changes, energy, tags) → Tanda Grouping (groups by `combo_key`, selects best 3–4 tracks).
+
+**Generated:** Slide-ready visualizations including: the 7-step tanda selection pipeline diagram, the dataset & feature engineering summary card (294 tracks, 94 Essentia features, sampling logic, tag similarity scoring), the composite score weight breakdown (BPM 0.20, danceability 0.20, energy 0.20, chords 0.15, tag sim SBERT 0.25), and the LangGraph agent routing diagram (PLAN / ADJUST / QUESTION branches). Generated as dark-background presentation slides for `DJ_Presentation.pdf`.
+
+**Manual edits:** Yes — adjusted layout, wording, and color coding.
+
+---
+
+### 19. LaTeX Syntax Debugging
+
+**Prompt (reconstructed):**
+> Please explain the issue and help me debug LaTeX formatting problems. Why does indentation not work here? `\indent` did not work: `\subsection{Music Information Retrieval}\label{sec:related-mir} \indent Music Information Retrieval (MIR) provides...`
+
+**Generated:** Explanation that `\indent` has no effect after a section heading because LaTeX's `\subsection` already starts a new paragraph context and the first paragraph of a section is intentionally not indented by default under most styles. Suggested fixes: use `\noindent` to suppress indentation consistently, or add `\usepackage{indentfirst}` to the preamble to indent all first paragraphs including post-heading ones, or restructure the paragraph so it is not the first after the heading.
+
+**Manual edits:** Yes — tested each suggested fix in the actual `.tex` source to confirm which one matched the document's existing indentation style.

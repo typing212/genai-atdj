@@ -177,3 +177,46 @@ The following sub-prompts were given across several rounds:
 **Generated:** Wrapped the slider section in a `@st.fragment`. Exposed the live values to the audio iframe through `window.__atdjGapMs` and `window.__atdjCortinaSec`. Changed the audio player so it reads these values from the window at advance time instead of baking them in when the iframe first renders.
 
 **Manual edits:** Yes — added a small toast that confirms the new value, because the Session Log entry does not paint until the next full rerun and the user would otherwise have no visible feedback inside the fragment.
+
+---
+
+### 12. LangGraph Learning & Code Structure
+
+**Prompt (reconstructed):**
+> I'm trying to understand how LangGraph StateGraph works and how to structure the PLAN subgraph for this project. Can you explain the key concepts (nodes, edges, conditional routing, reducers) and help me set up the graph skeleton with the correct state type?
+
+**Generated:** Explanations of StateGraph mechanics, reducer patterns (`operator.add`), and conditional edge routing. Helped structure the `AgentState` TypedDict and the skeleton of `atdj/agent/graph.py`, including node registration and conditional edge wiring.
+
+**Manual edits:** Yes — adapted the generated structure to fit the project's specific nodes (`session_init`, `tanda_planner`,
+`cortina_selector`, `queue_publisher`, etc.) and tuned the conditional routing logic.
+
+---
+
+### 13. Cortina Pool & Generation Pipeline
+
+**Prompt (reconstructed):**
+> Help me understand and structure the cortina module — how to score pool clips against a preceding tanda, and how to go from tanda features to a Lyria-generated audio clip via an LLM-crafted prompt.
+
+**Generated:** Explained the scoring formula and feature extraction approach. Helped structure `atdj/cortina/pool.py` (BPM/energy scoring, exclusion list, fallback) and `atdj/cortina/generator.py` (`_summarize_tanda`, `_craft_music_prompt`, `_call_lyria` streaming pipeline).
+
+**Manual edits:** Yes — tuned the scoring weights, mood lookup table, genre list in the prompt rules, and the energy bucketing thresholds.
+
+### 14. UI Bug Fixes (Iterative)
+
+**Prompt (reconstructed, multiple sessions):**
+> Various small UI bug reports, e.g.: "the session log is not showing all logs", "the energy arc dots don't update after Clear", "the chat input doesn't clear on send", "Now Playing card doesn't update when a new plan runs after Clear".
+
+**Generated:** Targeted fixes across `atdj/ui/page_main.py` and `atdj/ui/audio_player.py` — session state resets, rerun triggers, widget key corrections, and DOM/iframe timing patches.
+
+**Manual edits:** Yes — each fix was verified manually in the browser before keeping; several required follow-up prompts when the first generated fix introduced a regression elsewhere.
+
+---
+
+### 15. Project Report Writing Assistance
+
+**Prompt (reconstructed):**
+> Help us write the structure of the AT-DJ project report based on the actual source code. Help us check the grammar and fix the logic of our overall writing. 
+
+**Generated:** LaTeX structure content for all sections, including figures, tables, and prose grounded in the actual implementation. Grammar and logic suggestions. 
+
+**Manual edits:** Yes — wrote based on the structure and reviewed all generated content against the source code, corrected inaccuracies, adjusted figure layout, and made final wording decisions after grammar and logic checking.

@@ -56,6 +56,20 @@ DEFAULT_PARAMS = {
     "limiter_threshold_db": -1.0,
 }
 
+# 2026-05-07: PARSE_PROMPT extended with an "Already known from prior turns"
+# block so multi-round clarification doesn't re-ask about slots earlier turns
+# already pinned. Original prompt had only {playlist_summary} and {user_message};
+# new prompt also has {pinned_slots}. Graph structure unchanged.
+# PARSE_PROMPT = """\
+# You are parsing an audio adjustment request for a tango DJ app.
+#
+# Current playlist context:
+# {playlist_summary}
+#
+# Feature to parameter mapping:
+# ...
+# (original prompt body retained in git history; see commit prior to 2026-05-07)
+# """
 PARSE_PROMPT = """\
 You are parsing an audio adjustment request for a tango DJ app.
 
@@ -88,6 +102,9 @@ Reset keywords (direction="reset", feature and magnitude are ignored):
 - "back to default", "use original", "undo", "revert", "reset", "restore",
   "remove my changes", "go back to normal", "original version", "no enhancement"
 
+Already known from prior turns (treat as filled; do NOT ask about these again unless the current user message explicitly contradicts them):
+{pinned_slots}
+
 User message: "{user_message}"
 
 Return a JSON object with exactly these fields (no markdown, no extra text):
@@ -102,6 +119,11 @@ Return a JSON object with exactly these fields (no markdown, no extra text):
   "clarification_options": ["option1", "option2"] or []
 }}
 
+Rules for known slots:
+- For each slot listed in "Already known from prior turns", copy that exact value into the JSON output unchanged.
+- Override a known slot ONLY when the current user message explicitly contradicts it. Examples that DO override: previously scope=next_tanda, current message "actually all of them" → scope=rest; previously direction=up, current message "actually quieter" → direction=down. Examples that do NOT override: a clarification reply that is silent about a slot already pinned.
+- If the known slots together with the current message already specify enough to act (feature + direction + scope are all filled, OR direction=reset with a scope), set `needs_clarification` to false and leave `clarification_question`/`clarification_options` empty. Do not ask about a slot that is already pinned.
+
 Rules for `clarification_options`:
 - Write user-facing labels in plain English. The user reads them as a numbered menu.
 - DO NOT include internal codes like "(up)", "(down)", "(rest)", "(loudness)", or any parenthesized direction/feature tags.
@@ -109,10 +131,26 @@ Rules for `clarification_options`:
 - Bad:  "Increase loudness (up)", "Decrease loudness (down)", "Noise reduction up".
 - Maximum 4 options. Pick the 4 most likely interpretations — long menus (8+) overwhelm the user. If you can't narrow it down, ask a more focused `clarification_question`.
 
-Set `needs_clarification` to true ONLY when you genuinely cannot infer enough from the user message AND the playlist context to act. If the request is fully unambiguous, return false and leave `clarification_question`/`clarification_options` empty.
+Set `needs_clarification` to true ONLY when you genuinely cannot infer enough from the user message AND the known-slot block AND the playlist context to act. If the request is fully unambiguous, return false and leave `clarification_question`/`clarification_options` empty.
 
 If the user asks to change something that is NOT one of the supported features (loudness/bass/presence/noise/highpass/limiter) — e.g. "make it more sparkly", "add reverb", "speed it up" — set `feature` to null, `needs_clarification` to true, and use `clarification_question` to explain (briefly) which adjustments ARE supported, then offer the closest supported choices in `clarification_options`.
 """
+
+
+def _format_pinned_slots(state: AdjustmentState) -> str:
+    """Render the prior-turn pinned slots as a human-readable block for the
+    parse prompt. Returns "(none)" when nothing is pinned yet so the LLM has
+    a stable token sequence to anchor on rather than an empty placeholder.
+    """
+    items = [
+        ("scope",       state.get("scope")),
+        ("feature",     state.get("feature")),
+        ("direction",   state.get("direction")),
+        ("magnitude",   state.get("magnitude")),
+        ("target_name", state.get("target_name")),
+    ]
+    lines = [f"- {k}: {v}" for k, v in items if v]
+    return "\n".join(lines) if lines else "(none)"
 
 
 # State
@@ -405,8 +443,17 @@ def emit_cancel(state: AdjustmentState) -> dict:
 
 def parse_request(state: AdjustmentState) -> dict:
     summary = _playlist_summary(state["playlist"], state["current_index"])
+    # 2026-05-07: feed the prior-turn pinned slots into the prompt so the LLM
+    # does not re-ask about anything already resolved. The Python-side merge
+    # and the enough_to_act override below remain as defense-in-depth.
+    # prompt = PARSE_PROMPT.format(
+    #     playlist_summary=summary,
+    #     user_message=state["user_message"],
+    # )
+    pinned_slots = _format_pinned_slots(state)
     prompt = PARSE_PROMPT.format(
         playlist_summary=summary,
+        pinned_slots=pinned_slots,
         user_message=state["user_message"],
     )
     llm = _get_llm()

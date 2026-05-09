@@ -166,7 +166,7 @@ Skip integration tests (which call out to a real LLM) with `-m "not integration"
 - [`doc/BLUEPRINT.md`](doc/BLUEPRINT.md) — engineering plan, module breakdown, current status, and tech-stack decisions.
 - [`tests/UI_TEST_GUIDE.md`](tests/UI_TEST_GUIDE.md) — manual end-to-end test scenarios with measured latencies.
 - [`atdj/schemas/README.md`](atdj/schemas/README.md) — field-by-field schema reference.
-- [`doc/report/ai_usage.md`](doc/report/ai_usage.md) — disclosure of AI tool usage during the project.
+- [`doc/ai_usage.md`](doc/ai_usage.md) — disclosure of AI tool usage during the project.
 
 ---
 

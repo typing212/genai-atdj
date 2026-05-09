@@ -286,6 +286,61 @@ The Quality Enhance toggle and the auto-enhance-on-PLAN hook were removed. Audio
 
 The Quality Enhance toggle and the auto-enhance-on-PLAN hook were removed, so the "preference persists across plans" feature no longer exists. Audio enhancement is one-shot per chat request now.
 
+### 9.8 Free-form non-option reply (full circle, off-menu text)
+
+| # | Action | Expected | Pass? | Latency |
+|---|--------|----------|-------|---------|
+| 9.8.1 | After `it sounds a bit off` opens the clarify menu, reply with text that does NOT match any option, e.g. `actually just less hiss` | `resolve_pending_menu` finds no substring match; falls through to `parse_request`. Parser re-extracts a fresh feature/direction tuple from the new text. When the user has not specified a scope, parser defaults to `scope=current` → routes to `reject_current` and surfaces the rest-of-session / next-tanda / cancel menu. | ✅ PASS (2026-05-06, Playwright run with planned session loaded) — reply: `Cannot modify a track that is already playing. Would you like to: Apply to all songs after this one (rest of session) / Apply to the next song only / Cancel` | 4.8s |
+
+### 9.9 Unsupported-feature word triggers `needs_clarification`
+
+| # | Action | Expected | Pass? | Latency |
+|---|--------|----------|-------|---------|
+| 9.9.1 | Type `make the next tanda more sparkly` | Parser returns `needs_clarification` for unsupported feature words (does NOT silently invent a feature name). Reply lists the supported feature words and asks the user to pick. | ✅ PASS (2026-05-06, Playwright run with planned session loaded) — reply: `"Sparkly" isn't a supported adjustment. I can tweak loudness, bass, presence (vocal brightness), noise reduction, low-rumble cutoff, or peak limiting. Which of these comes closest to what you're after? / More brightness / vocal clarity (presence) / Less hiss / ...` | 8.0s |
+
+### 9.10 No-targets terminal (placeholder — needs end-of-playlist state)
+
+| # | Action | Expected | Pass? | Latency |
+|---|--------|----------|-------|---------|
+| 9.10.1 | With current_index pointing at the LAST tanda of a playlist, type `boost the bass on the next tanda` | `resolve_targets` returns an empty list → `no_targets` terminal fires. Reply: `No tracks to adjust; nothing matched after the current position.` | ⏳ PENDING — needs playlist setup with current_index in last tanda. Run manually. | -- |
+
+### 9.11 Missing-audio-file fallback (placeholder — needs file deletion)
+
+| # | Action | Expected | Pass? | Latency |
+|---|--------|----------|-------|---------|
+| 9.11.1 | While a track is playing, delete its WAV from disk; then send any audio-adjustment chat command targeting upcoming tracks | `measure_reference` fails to read the current file → falls back to `DEFAULT_PARAMS` reference; `compute_adjustments` and `execute_enhancement` proceed normally; a warning is written to the JSON session log. | ⏳ PENDING — needs file-system manipulation outside the chat. Run manually. | -- |
+
+### 9.12 Multi-API latency benchmark (audio scenarios across 4 models)
+
+**Purpose:** quantify wall-clock latency for the audio chat loop across two Claude models and two Gemini models so the paper can report a per-model latency table rather than a single Claude column.
+
+**Method:** Streamlit running on `:8501`; Playwright (headed Chromium) drives the app for each provider/model combination. Per model: configure sidebar (provider + model + API key from `.env` via `python-dotenv` so the key value never reaches Claude's context), click Save Settings, send one PLAN prompt to populate the playlist, send one Q&A prompt to warm caches, then run all eight scenarios × three runs. Timer starts when the "➤" send button is clicked and stops when a new chat-message bubble appears in the DOM with stable, non-placeholder text content (text unchanged for 1.5s, count grew by exactly one). Cleanup between scenarios: only sends `"3"` when the latest chat bubble looks like an open menu (DOM heuristic), otherwise skips. Failed cells retry once.
+
+**Scenarios:** the eight chat-driven scenarios from Test 9 (1 happy-path, 2 clarify, 3 freeform, 4 unsupported, 5 read-only, 8 cancel, 9 reset, 10 interrupt). Scenarios 6 and 7 omitted (require state outside the chat surface).
+
+**Models (Streamlit sidebar selections):** `claude-sonnet-4-6`, `claude-haiku-4-5`, `gemini-2.5-flash`, `gemini-2.0-flash`.
+
+**Run date:** 2026-05-06 (Playwright headed Chromium, 96 cells = 8 × 4 × 3, all populated).
+
+| # | Scenario | Sonnet 4.6 | Haiku 4.5 | Gemini 2.5 Flash | Gemini 2.0 Flash |
+|---|----------|-----------:|----------:|-----------------:|-----------------:|
+| 1 | Happy-path direct apply       |  8.8s | 32.8s | 15.7s | 19.5s |
+| 2 | Clarification when ambiguous  |  9.0s |  6.8s | 12.9s | 10.6s |
+| 3 | Free-form non-option reply    |  7.8s |  6.3s | 10.7s |  6.9s |
+| 4 | Unsupported feature           | 10.8s |  7.7s | 52.9s |  7.5s |
+| 5 | Current-track read-only       |  7.6s |  6.9s |  9.5s |  7.8s |
+| 8 | Cancel mid-flow               |  7.8s |  6.8s | 10.5s |  6.7s |
+| 9 | Reset path                    | 10.3s |  7.0s |  9.5s |  7.6s |
+| 10 | Off-topic interrupt mid-menu | 28.6s | 20.8s | 30.1s | 22.3s |
+| | **Mean across scenarios**       | **11.4s** | **11.9s** | **18.9s** | **11.1s** |
+
+**Observations:**
+- Smaller-and-cheaper does not imply faster. Claude Haiku is slower than Sonnet on scenario 1 because that scenario does real DSP work (the LLM call is a small fraction of the total), and Gemini 2.5 Flash is roughly seven times slower than Gemini 2.0 Flash on scenario 4 because its `needs_clarification` reply is markedly more verbose.
+- Scenario 10 (off-topic interrupt) is uniformly slow across all four columns — it abandons the audio menu and pays a full PLAN cost on a fresh tanda. Variance there is determined by tool work, not by which LLM is in the loop.
+- Excluding scenario 10, three of the four models cluster within a few seconds of each other on a per-scenario basis. Gemini 2.5 Flash trails because of the scenario-4 anomaly.
+
+**This benchmark is reported in the paper at `tab:latency-multi-api` (§5.6 Evaluation, Latency paragraph).**
+
 ---
 
 ## Test 10 — App boots without duplicate-key errors

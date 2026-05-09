@@ -1,0 +1,466 @@
+[
+  {
+    "prompt": "romantic Di Sarli tango from the 1940s, smooth",
+    "notes": "fully specified",
+    "expected_style": "tango",
+    "expected_decade": "1940s",
+    "translate_s": 3.388,
+    "select_s": 1.996,
+    "total_s": 5.384,
+    "has_tanda": true,
+    "tanda_size": 4,
+    "mean_score": 0.6956,
+    "min_score": 0.6622,
+    "max_score": 0.715,
+    "n_active_hard_fields": 3,
+    "active_hard_fields": [
+      "decade",
+      "orchestra",
+      "style"
+    ],
+    "n_active_soft_fields": 4,
+    "active_soft_fields": [
+      "bpm_label",
+      "danceability_label",
+      "energy_label",
+      "tags"
+    ],
+    "constraint_adherence": {
+      "style_ok": true,
+      "decade_ok": true,
+      "orchestra_ok": true
+    },
+    "coherence": {
+      "score_variance": 0.0004,
+      "bpm_spread_bpm": 16.99,
+      "energy_spread": 0.1884
+    },
+    "pool": {
+      "candidate_pool_size": 23,
+      "n_combo_keys_with_enough_tracks": 4
+    },
+    "score_components": {
+      "bpm_score": {
+        "mean": 0.8942,
+        "std": 0.0552
+      },
+      "danceability_score": {
+        "mean": 0.5012,
+        "std": 0.0759
+      },
+      "energy_score": {
+        "mean": 0.9191,
+        "std": 0.0451
+      },
+      "chords_score": {
+        "mean": 0.8895,
+        "std": 0.0561
+      }
+    },
+    "tanda_tracks": [
+      {
+        "title": "Charlemos",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "tango",
+        "year": 1941.0,
+        "bpm": 129.71212768554688,
+        "composite_score": 0.7149529059448484
+      },
+      {
+        "title": "Cosas Olvidadas",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "tango",
+        "year": 1940.0,
+        "bpm": 140.0244903564453,
+        "composite_score": 0.704606204061461
+      },
+      {
+        "title": "Lo Mismo Que Antes",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "tango",
+        "year": 1941.0,
+        "bpm": 123.08533477783205,
+        "composite_score": 0.7006542425424621
+      },
+      {
+        "title": "Tarareando",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "tango",
+        "year": 1942.0,
+        "bpm": 123.03050231933594,
+        "composite_score": 0.662161194325653
+      }
+    ]
+  },
+  {
+    "prompt": "fast D'Arienzo tango, very danceable, high energy",
+    "notes": "no decade constraint",
+    "expected_style": "tango",
+    "expected_decade": null,
+    "translate_s": 3.217,
+    "select_s": 0.249,
+    "total_s": 3.466,
+    "has_tanda": true,
+    "tanda_size": 4,
+    "mean_score": 0.6892,
+    "min_score": 0.658,
+    "max_score": 0.706,
+    "n_active_hard_fields": 2,
+    "active_hard_fields": [
+      "orchestra",
+      "style"
+    ],
+    "n_active_soft_fields": 4,
+    "active_soft_fields": [
+      "bpm_label",
+      "danceability_label",
+      "energy_label",
+      "tags"
+    ],
+    "constraint_adherence": {
+      "style_ok": true,
+      "orchestra_ok": true
+    },
+    "coherence": {
+      "score_variance": 0.00034,
+      "bpm_spread_bpm": 11.97,
+      "energy_spread": 0.1067
+    },
+    "pool": {
+      "candidate_pool_size": 18,
+      "n_combo_keys_with_enough_tracks": 3
+    },
+    "score_components": {
+      "bpm_score": {
+        "mean": 0.6674,
+        "std": 0.0484
+      },
+      "danceability_score": {
+        "mean": 0.7713,
+        "std": 0.0844
+      },
+      "energy_score": {
+        "mean": 0.9365,
+        "std": 0.0546
+      },
+      "chords_score": {
+        "mean": 0.867,
+        "std": 0.1159
+      }
+    },
+    "tanda_tracks": [
+      {
+        "title": "Bien Pulenta",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "tango",
+        "year": 1950.0,
+        "bpm": 135.50466918945312,
+        "composite_score": 0.7060331044430883
+      },
+      {
+        "title": "A Suerte Y Verdad",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "tango",
+        "year": 1944.0,
+        "bpm": 123.53594207763672,
+        "composite_score": 0.6974184111673924
+      },
+      {
+        "title": "Barajando",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "tango",
+        "year": 1929.0,
+        "bpm": 128.24681091308594,
+        "composite_score": 0.6954176050376775
+      },
+      {
+        "title": "El Nene Del Abasto",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "tango",
+        "year": NaN,
+        "bpm": 132.64846801757812,
+        "composite_score": 0.658025735559663
+      }
+    ]
+  },
+  {
+    "prompt": "lively milonga, fast and playful",
+    "notes": "milonga",
+    "expected_style": "milonga",
+    "expected_decade": null,
+    "translate_s": 2.218,
+    "select_s": 0.324,
+    "total_s": 2.542,
+    "has_tanda": true,
+    "tanda_size": 3,
+    "mean_score": 0.7092,
+    "min_score": 0.702,
+    "max_score": 0.721,
+    "n_active_hard_fields": 1,
+    "active_hard_fields": [
+      "style"
+    ],
+    "n_active_soft_fields": 4,
+    "active_soft_fields": [
+      "bpm_label",
+      "danceability_label",
+      "energy_label",
+      "tags"
+    ],
+    "constraint_adherence": {
+      "style_ok": true
+    },
+    "coherence": {
+      "score_variance": 7e-05,
+      "bpm_spread_bpm": 1.55,
+      "energy_spread": 0.1835
+    },
+    "pool": {
+      "candidate_pool_size": 37,
+      "n_combo_keys_with_enough_tracks": 8
+    },
+    "score_components": {
+      "bpm_score": {
+        "mean": 0.4691,
+        "std": 0.0078
+      },
+      "danceability_score": {
+        "mean": 0.8981,
+        "std": 0.0701
+      },
+      "energy_score": {
+        "mean": 0.8659,
+        "std": 0.0668
+      },
+      "chords_score": {
+        "mean": 0.7481,
+        "std": 0.0527
+      }
+    },
+    "tanda_tracks": [
+      {
+        "title": "Chaparron",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "milonga",
+        "year": 1957.0,
+        "bpm": 112.44324493408205,
+        "composite_score": 0.7209669081421018
+      },
+      {
+        "title": "Milonga Querida",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "milonga",
+        "year": NaN,
+        "bpm": 110.89695739746094,
+        "composite_score": 0.7046643046882686
+      },
+      {
+        "title": "El Temblor",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "milonga",
+        "year": NaN,
+        "bpm": 110.8902359008789,
+        "composite_score": 0.7019668115351227
+      }
+    ]
+  },
+  {
+    "prompt": "slow melancholic Pugliese tango",
+    "notes": "mood constraint only",
+    "expected_style": "tango",
+    "expected_decade": null,
+    "translate_s": 4.651,
+    "select_s": 0.177,
+    "total_s": 4.828,
+    "has_tanda": true,
+    "tanda_size": 4,
+    "mean_score": 0.8001,
+    "min_score": 0.7728,
+    "max_score": 0.824,
+    "n_active_hard_fields": 2,
+    "active_hard_fields": [
+      "orchestra",
+      "style"
+    ],
+    "n_active_soft_fields": 4,
+    "active_soft_fields": [
+      "bpm_label",
+      "danceability_label",
+      "energy_label",
+      "tags"
+    ],
+    "constraint_adherence": {
+      "style_ok": true,
+      "orchestra_ok": true
+    },
+    "coherence": {
+      "score_variance": 0.000357,
+      "bpm_spread_bpm": 12.05,
+      "energy_spread": 0.1933
+    },
+    "pool": {
+      "candidate_pool_size": 18,
+      "n_combo_keys_with_enough_tracks": 3
+    },
+    "score_components": {
+      "bpm_score": {
+        "mean": 0.943,
+        "std": 0.0472
+      },
+      "danceability_score": {
+        "mean": 0.8564,
+        "std": 0.0546
+      },
+      "energy_score": {
+        "mean": 0.935,
+        "std": 0.0582
+      },
+      "chords_score": {
+        "mean": 0.784,
+        "std": 0.0748
+      }
+    },
+    "tanda_tracks": [
+      {
+        "title": "Rondando Tu Esquina",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Roberto Chanel",
+        "style": "tango",
+        "year": 1945.0,
+        "bpm": 114.34395599365234,
+        "composite_score": 0.8240278816146871
+      },
+      {
+        "title": "Corrientes Y Esmeralda",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Roberto Chanel",
+        "style": "tango",
+        "year": 1944.0,
+        "bpm": 117.5548324584961,
+        "composite_score": 0.8090088266616475
+      },
+      {
+        "title": "Nada Mas Que Un Corazon",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Roberto Chanel",
+        "style": "tango",
+        "year": 1944.0,
+        "bpm": 120.27110290527344,
+        "composite_score": 0.7945486660347437
+      },
+      {
+        "title": "Dandy",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Roberto Chanel",
+        "style": "tango",
+        "year": 1945.0,
+        "bpm": 126.39187622070312,
+        "composite_score": 0.7728206344587507
+      }
+    ]
+  },
+  {
+    "prompt": "classic golden age tango",
+    "notes": "era-only, no bpm/energy",
+    "expected_style": "tango",
+    "expected_decade": null,
+    "translate_s": 3.169,
+    "select_s": 1.577,
+    "total_s": 4.745,
+    "has_tanda": true,
+    "tanda_size": 4,
+    "mean_score": 0.7649,
+    "min_score": 0.7486,
+    "max_score": 0.7795,
+    "n_active_hard_fields": 1,
+    "active_hard_fields": [
+      "style"
+    ],
+    "n_active_soft_fields": 4,
+    "active_soft_fields": [
+      "bpm_label",
+      "danceability_label",
+      "energy_label",
+      "tags"
+    ],
+    "constraint_adherence": {
+      "style_ok": true
+    },
+    "coherence": {
+      "score_variance": 0.00012,
+      "bpm_spread_bpm": 9.15,
+      "energy_spread": 0.1609
+    },
+    "pool": {
+      "candidate_pool_size": 216,
+      "n_combo_keys_with_enough_tracks": 38
+    },
+    "score_components": {
+      "bpm_score": {
+        "mean": 0.9168,
+        "std": 0.0356
+      },
+      "danceability_score": {
+        "mean": 0.8334,
+        "std": 0.0296
+      },
+      "energy_score": {
+        "mean": 0.877,
+        "std": 0.0838
+      },
+      "chords_score": {
+        "mean": 0.922,
+        "std": 0.0651
+      }
+    },
+    "tanda_tracks": [
+      {
+        "title": "Es Mejor Perdonar",
+        "orchestra": "Pedro Laurenz",
+        "singer": "Juan Carlos Casas",
+        "style": "tango",
+        "year": 1942.0,
+        "bpm": 128.94374084472656,
+        "composite_score": 0.7794901484480765
+      },
+      {
+        "title": "Al Verla Pasar",
+        "orchestra": "Pedro Laurenz",
+        "singer": "Juan Carlos Casas",
+        "style": "tango",
+        "year": 1942.0,
+        "bpm": 126.1303939819336,
+        "composite_score": 0.7668746200246319
+      },
+      {
+        "title": "Abandono",
+        "orchestra": "Pedro Laurenz",
+        "singer": "Juan Carlos Casas",
+        "style": "tango",
+        "year": 1937.0,
+        "bpm": 129.37081909179688,
+        "composite_score": 0.7647498977239009
+      },
+      {
+        "title": "No Me Extra\u00f1a",
+        "orchestra": "Pedro Laurenz",
+        "singer": "Juan Carlos Casas",
+        "style": "tango",
+        "year": 1940.0,
+        "bpm": 135.28382873535156,
+        "composite_score": 0.7486487318043813
+      }
+    ]
+  }
+]

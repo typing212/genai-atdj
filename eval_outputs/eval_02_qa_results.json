@@ -1,0 +1,120 @@
+[
+  {
+    "question": "Who is Carlos Di Sarli?",
+    "category": "orchestra",
+    "difficulty": "easy",
+    "latency_s": 9.545,
+    "answer_length": 1331,
+    "pass_rate": 1.0,
+    "hallucination_rate": 0.0,
+    "n_must_contain": 3,
+    "n_must_contain_pass": 3,
+    "must_contain_detail": {
+      "di sarli": true,
+      "orchestra": true,
+      "tango": true
+    },
+    "n_must_not_contain": 0,
+    "n_hallucination_fire": 0,
+    "must_not_contain_detail": {},
+    "answer_preview": "Carlos Di Sarli (January 7, 1903 \u2013 January 12, 1960) was an Argentine tango musician, orchestra leader, composer and pianist, according to Wikipedia.\n\nDi Sarli is considered one of the most important figures in tango music history. His orchestra had a very distinctive style characterized by a smooth",
+    "error": null
+  },
+  {
+    "question": "What is Juan D'Arienzo known for?",
+    "category": "orchestra",
+    "difficulty": "easy",
+    "latency_s": 9.891,
+    "answer_length": 1505,
+    "pass_rate": 1.0,
+    "hallucination_rate": 0.0,
+    "n_must_contain": 2,
+    "n_must_contain_pass": 2,
+    "must_contain_detail": {
+      "d'arienzo": true,
+      "rhythm": true
+    },
+    "n_must_not_contain": 0,
+    "n_hallucination_fire": 0,
+    "must_not_contain_detail": {},
+    "answer_preview": "Based on my general tango knowledge (AI-generated, not grounded in retrieved external sources), Juan D'Arienzo is known for several distinctive characteristics that made him legendary in Argentine Tango:\n\n**\"El Rey del Comp\u00e1s\" (The King of the Beat):** D'Arienzo earned this nickname for his incredib",
+    "error": null
+  },
+  {
+    "question": "Tell me about Osvaldo Pugliese's style.",
+    "category": "orchestra",
+    "difficulty": "medium",
+    "latency_s": 10.587,
+    "answer_length": 1758,
+    "pass_rate": 1.0,
+    "hallucination_rate": 0.0,
+    "n_must_contain": 1,
+    "n_must_contain_pass": 1,
+    "must_contain_detail": {
+      "pugliese": true
+    },
+    "n_must_not_contain": 0,
+    "n_hallucination_fire": 0,
+    "must_not_contain_detail": {},
+    "answer_preview": "**Please note: This answer is AI-generated and not grounded in retrieved external knowledge, as no external sources were successfully retrieved.**\n\nOsvaldo Pugliese developed one of the most distinctive and recognizable styles in tango music history. Here are the key characteristics of his approach:",
+    "error": null
+  },
+  {
+    "question": "Who was Anibal Troilo?",
+    "category": "orchestra",
+    "difficulty": "easy",
+    "latency_s": 10.183,
+    "answer_length": 1741,
+    "pass_rate": 1.0,
+    "hallucination_rate": 0.0,
+    "n_must_contain": 1,
+    "n_must_contain_pass": 1,
+    "must_contain_detail": {
+      "troilo": true
+    },
+    "n_must_not_contain": 0,
+    "n_hallucination_fire": 0,
+    "must_not_contain_detail": {},
+    "answer_preview": "Based on the tracks in your local catalog, I can see that An\u00edbal Troilo was clearly a significant tango orchestra leader, with recordings spanning from the 1940s through the 1960s. Your collection includes both instrumental pieces like \"A La Parrilla\" and \"Guapeando\" from the 1940s, as well as vocal",
+    "error": null
+  },
+  {
+    "question": "What is the difference between tango and vals?",
+    "category": "style",
+    "difficulty": "easy",
+    "latency_s": 11.554,
+    "answer_length": 1735,
+    "pass_rate": 1.0,
+    "hallucination_rate": 0.0,
+    "n_must_contain": 2,
+    "n_must_contain_pass": 2,
+    "must_contain_detail": {
+      "vals": true,
+      "tango": true
+    },
+    "n_must_not_contain": 0,
+    "n_hallucination_fire": 0,
+    "must_not_contain_detail": {},
+    "answer_preview": "Based on my local knowledge base, there are several key differences between tango and vals music and dancing:\n\n## Musical Structure\nThe most fundamental difference is in their time signatures:\n- **Tango** is in 2/4 or 4/4 time with strong downbeats and clear phrasing\n- **Vals** (Tango Vals) is in 3/",
+    "error": null
+  },
+  {
+    "question": "What is a milonga in the context of Argentine tango?",
+    "category": "style",
+    "difficulty": "easy",
+    "latency_s": 12.244,
+    "answer_length": 1701,
+    "pass_rate": 1.0,
+    "hallucination_rate": 0.0,
+    "n_must_contain": 1,
+    "n_must_contain_pass": 1,
+    "must_contain_detail": {
+      "milonga": true
+    },
+    "n_must_not_contain": 0,
+    "n_hallucination_fire": 0,
+    "must_not_contain_detail": {},
+    "answer_preview": "Based on the available context and my general knowledge, \"milonga\" in Argentine tango refers to **both a musical style and a type of dance**, with some additional meanings in tango culture.\n\n## Milonga as Music and Dance\n\nFrom the local knowledge available, milonga **predates tango and has African, ",
+    "error": null
+  }
+]

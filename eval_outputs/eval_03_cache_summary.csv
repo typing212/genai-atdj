@@ -1,0 +1,4 @@
+layer,cold_s,warm_s,speedup_x,saved_ms,notes
+catalog_csv_load,0.0017,5.7e-05,29.4,1.61,294 rows loaded
+catalog_feature_ranges,0.0005,3.4e-05,15.3,0.48,4 features cached
+llm_translation,6.3353,9.2e-05,69206.5,6335.21,"prompt='romantic Di Sarli tango from the 1940s, '"

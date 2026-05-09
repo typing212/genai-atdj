@@ -1,0 +1,6 @@
+prompt,notes,expected_style,expected_decade,translate_s,select_s,total_s,has_tanda,tanda_size,mean_score,min_score,max_score,n_active_hard_fields,n_active_soft_fields,adherence_style_ok,adherence_decade_ok,adherence_orchestra_ok,coherence_score_variance,coherence_bpm_spread_bpm,coherence_energy_spread,pool_candidate_pool_size,pool_n_combo_keys_with_enough_tracks
+"romantic Di Sarli tango from the 1940s, smooth",fully specified,tango,1940s,3.388,1.996,5.384,True,4,0.6956,0.6622,0.715,3,4,True,True,True,0.0004,16.99,0.1884,23,4
+"fast D'Arienzo tango, very danceable, high energy",no decade constraint,tango,,3.217,0.249,3.466,True,4,0.6892,0.658,0.706,2,4,True,,True,0.00034,11.97,0.1067,18,3
+"lively milonga, fast and playful",milonga,milonga,,2.218,0.324,2.542,True,3,0.7092,0.702,0.721,1,4,True,,,7e-05,1.55,0.1835,37,8
+slow melancholic Pugliese tango,mood constraint only,tango,,4.651,0.177,4.828,True,4,0.8001,0.7728,0.824,2,4,True,,True,0.000357,12.05,0.1933,18,3
+classic golden age tango,"era-only, no bpm/energy",tango,,3.169,1.577,4.745,True,4,0.7649,0.7486,0.7795,1,4,True,,,0.00012,9.15,0.1609,216,38

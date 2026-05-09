@@ -1,0 +1,22 @@
+question,category,difficulty,latency_s,answer_length,pass_rate,hallucination_rate,n_must_contain,n_must_contain_pass,n_must_not_contain,n_hallucination_fire,answer_preview,error
+Who is Carlos Di Sarli?,orchestra,easy,9.545,1331,1.0,0.0,3,3,0,0,"Carlos Di Sarli (January 7, 1903 – January 12, 1960) was an Argentine tango musician, orchestra leader, composer and pianist, according to Wikipedia.
+
+Di Sarli is considered one of the most important figures in tango music history. His orchestra had a very distinctive style characterized by a smooth",
+What is Juan D'Arienzo known for?,orchestra,easy,9.891,1505,1.0,0.0,2,2,0,0,"Based on my general tango knowledge (AI-generated, not grounded in retrieved external sources), Juan D'Arienzo is known for several distinctive characteristics that made him legendary in Argentine Tango:
+
+**""El Rey del Compás"" (The King of the Beat):** D'Arienzo earned this nickname for his incredib",
+Tell me about Osvaldo Pugliese's style.,orchestra,medium,10.587,1758,1.0,0.0,1,1,0,0,"**Please note: This answer is AI-generated and not grounded in retrieved external knowledge, as no external sources were successfully retrieved.**
+
+Osvaldo Pugliese developed one of the most distinctive and recognizable styles in tango music history. Here are the key characteristics of his approach:",
+Who was Anibal Troilo?,orchestra,easy,10.183,1741,1.0,0.0,1,1,0,0,"Based on the tracks in your local catalog, I can see that Aníbal Troilo was clearly a significant tango orchestra leader, with recordings spanning from the 1940s through the 1960s. Your collection includes both instrumental pieces like ""A La Parrilla"" and ""Guapeando"" from the 1940s, as well as vocal",
+What is the difference between tango and vals?,style,easy,11.554,1735,1.0,0.0,2,2,0,0,"Based on my local knowledge base, there are several key differences between tango and vals music and dancing:
+
+## Musical Structure
+The most fundamental difference is in their time signatures:
+- **Tango** is in 2/4 or 4/4 time with strong downbeats and clear phrasing
+- **Vals** (Tango Vals) is in 3/",
+What is a milonga in the context of Argentine tango?,style,easy,12.244,1701,1.0,0.0,1,1,0,0,"Based on the available context and my general knowledge, ""milonga"" in Argentine tango refers to **both a musical style and a type of dance**, with some additional meanings in tango culture.
+
+## Milonga as Music and Dance
+
+From the local knowledge available, milonga **predates tango and has African, ",

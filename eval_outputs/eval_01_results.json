@@ -1,0 +1,394 @@
+[
+  {
+    "method": "our_pipeline",
+    "prompt": "romantic Di Sarli tango from the 1940s, smooth and lyrical",
+    "translation_latency_s": 4.784,
+    "selection_latency_s": 1.942,
+    "total_latency_s": 6.726,
+    "mean_tanda_score": 0.695,
+    "tanda_size": 4,
+    "feature_coverage": 4,
+    "has_tanda": true,
+    "valid_combo": true,
+    "valid_size": true,
+    "valid_style": true,
+    "top_tracks": [
+      {
+        "title": "Shusheta",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1940.0,
+        "composite_score": 0.7261937651165482
+      },
+      {
+        "title": "Cosas Olvidadas",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "tango",
+        "year": 1940.0,
+        "composite_score": 0.7101157072472101
+      },
+      {
+        "title": "Otra Noche",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Alberto Podest\u00e1",
+        "style": "tango",
+        "year": 1944.0,
+        "composite_score": 0.7093599495502101
+      },
+      {
+        "title": "Charlemos",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "tango",
+        "year": 1941.0,
+        "composite_score": 0.7016329367676023
+      },
+      {
+        "title": "Lo Mismo Que Antes",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "tango",
+        "year": 1941.0,
+        "composite_score": 0.6989139731795356
+      }
+    ],
+    "bottom_tracks": [
+      {
+        "title": "Soy El Cantor De La Orquesta",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Jorge Dur\u00e1n",
+        "style": "tango",
+        "year": 1945.0,
+        "composite_score": 0.627218442208464
+      },
+      {
+        "title": "Un Tango Y Nada Mas",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Jorge Dur\u00e1n",
+        "style": "tango",
+        "year": 1945.0,
+        "composite_score": 0.6183704220087174
+      },
+      {
+        "title": "La Morocha",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1941.0,
+        "composite_score": 0.5942751548786559
+      },
+      {
+        "title": "Anselmo Acu\u00f1a",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "tango",
+        "year": 1943.0,
+        "composite_score": 0.5847106080511055
+      },
+      {
+        "title": "Ojos Negros",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1945.0,
+        "composite_score": 0.5515926670841438
+      }
+    ]
+  },
+  {
+    "method": "our_pipeline",
+    "prompt": "fast D'Arienzo tango, very danceable, high energy",
+    "translation_latency_s": 4.039,
+    "selection_latency_s": 0.271,
+    "total_latency_s": 4.31,
+    "mean_tanda_score": 0.6795,
+    "tanda_size": 4,
+    "feature_coverage": 4,
+    "has_tanda": true,
+    "valid_combo": true,
+    "valid_size": true,
+    "valid_style": true,
+    "top_tracks": [
+      {
+        "title": "Barajando",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "tango",
+        "year": 1929.0,
+        "composite_score": 0.7004189935278775
+      },
+      {
+        "title": "Bien Pulenta",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "tango",
+        "year": 1950.0,
+        "composite_score": 0.6890244347686918
+      },
+      {
+        "title": "A Suerte Y Verdad",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "tango",
+        "year": 1944.0,
+        "composite_score": 0.6865514934976193
+      },
+      {
+        "title": "Tierrita",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "H\u00e9ctor Maur\u00e9",
+        "style": "tango",
+        "year": 1963.0,
+        "composite_score": 0.6635823738480549
+      },
+      {
+        "title": "Seamos Amigos",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "tango",
+        "year": 1944.0,
+        "composite_score": 0.6420910010436761
+      }
+    ],
+    "bottom_tracks": [
+      {
+        "title": "Amarras",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "H\u00e9ctor Maur\u00e9",
+        "style": "tango",
+        "year": 1955.0,
+        "composite_score": 0.568079972926764
+      },
+      {
+        "title": "El Flete",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 2000.0,
+        "composite_score": 0.5523329769175523
+      },
+      {
+        "title": "La Guitarrita",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1928.0,
+        "composite_score": 0.5495323602318793
+      },
+      {
+        "title": "Don Esteban",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1920.0,
+        "composite_score": 0.522736710853537
+      },
+      {
+        "title": "El Cachafaz",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1953.0,
+        "composite_score": 0.48330818669211795
+      }
+    ]
+  },
+  {
+    "method": "our_pipeline",
+    "prompt": "slow melancholic Pugliese tango, dramatic and intense",
+    "translation_latency_s": 5.198,
+    "selection_latency_s": 0.176,
+    "total_latency_s": 5.373,
+    "mean_tanda_score": 0.7301,
+    "tanda_size": 4,
+    "feature_coverage": 4,
+    "has_tanda": true,
+    "valid_combo": true,
+    "valid_size": true,
+    "valid_style": true,
+    "top_tracks": [
+      {
+        "title": "Yuyo Verde",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Alberto Mor\u00e1n",
+        "style": "tango",
+        "year": 1945.0,
+        "composite_score": 0.7394838584054089
+      },
+      {
+        "title": "Rondando Tu Esquina",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Roberto Chanel",
+        "style": "tango",
+        "year": 1945.0,
+        "composite_score": 0.7382588462202663
+      },
+      {
+        "title": "Cafetin",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Alberto Mor\u00e1n",
+        "style": "tango",
+        "year": 1947.0,
+        "composite_score": 0.737920765456458
+      },
+      {
+        "title": "Farol",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Roberto Chanel",
+        "style": "tango",
+        "year": 1943.0,
+        "composite_score": 0.7310600361538171
+      },
+      {
+        "title": "Yo Te Bendigo",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Roberto Chanel",
+        "style": "tango",
+        "year": 1947.0,
+        "composite_score": 0.7292698782347821
+      }
+    ],
+    "bottom_tracks": [
+      {
+        "title": "El Abrojito",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Alberto Mor\u00e1n",
+        "style": "tango",
+        "year": 1945.0,
+        "composite_score": 0.6209757308103219
+      },
+      {
+        "title": "Mal De Amores",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1946.0,
+        "composite_score": 0.6134633982077308
+      },
+      {
+        "title": "Seguime Si Podes",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1953.0,
+        "composite_score": 0.5883542811494277
+      },
+      {
+        "title": "Bien Milonga",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1951.0,
+        "composite_score": 0.5338109047078918
+      },
+      {
+        "title": "Emancipacion",
+        "orchestra": "Osvaldo Pugliese",
+        "singer": "Instrumental",
+        "style": "tango",
+        "year": 1955.0,
+        "composite_score": 0.5310075731428787
+      }
+    ]
+  },
+  {
+    "method": "our_pipeline",
+    "prompt": "lively milonga, fast and playful",
+    "translation_latency_s": 2.955,
+    "selection_latency_s": 0.321,
+    "total_latency_s": 3.277,
+    "mean_tanda_score": 0.7173,
+    "tanda_size": 3,
+    "feature_coverage": 4,
+    "has_tanda": true,
+    "valid_combo": true,
+    "valid_size": true,
+    "valid_style": true,
+    "top_tracks": [
+      {
+        "title": "Milonga Sentimental",
+        "orchestra": "Francisco Canaro",
+        "singer": "Ernesto Fam\u00e1",
+        "style": "milonga",
+        "year": 2007.0,
+        "composite_score": 0.7446383814037972
+      },
+      {
+        "title": "Chaparron",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "milonga",
+        "year": 1957.0,
+        "composite_score": 0.7285749940128446
+      },
+      {
+        "title": "Con Toda La Voz Que Tengo",
+        "orchestra": "Anibal Troilo",
+        "singer": "Francisco Fiorentino",
+        "style": "milonga",
+        "year": 1941.0,
+        "composite_score": 0.7181106181728556
+      },
+      {
+        "title": "Milonga Querida",
+        "orchestra": "Juan D'Arienzo",
+        "singer": "Alberto Echag\u00fce",
+        "style": "milonga",
+        "year": NaN,
+        "composite_score": 0.7139597086456355
+      },
+      {
+        "title": "Asi Es La Milonga",
+        "orchestra": "Ricardo Tanturi",
+        "singer": "Alberto Castillo",
+        "style": "milonga",
+        "year": 1942.0,
+        "composite_score": 0.7117921259298002
+      }
+    ],
+    "bottom_tracks": [
+      {
+        "title": "Pena Mulata",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "milonga",
+        "year": 1941.0,
+        "composite_score": 0.5733259744760699
+      },
+      {
+        "title": "Asi Me Gusta A Mi",
+        "orchestra": "Angel D'Agostino",
+        "singer": "Angel Vargas",
+        "style": "milonga",
+        "year": 1942.0,
+        "composite_score": 0.571966007052599
+      },
+      {
+        "title": "Ropa Blanca",
+        "orchestra": "Anibal Troilo",
+        "singer": "Alberto Marino",
+        "style": "milonga",
+        "year": 1943.0,
+        "composite_score": 0.5653342268230517
+      },
+      {
+        "title": "Yo Soy De San Telmo",
+        "orchestra": "Carlos Di Sarli",
+        "singer": "Roberto Rufino",
+        "style": "milonga",
+        "year": 1943.0,
+        "composite_score": 0.5620773032435034
+      },
+      {
+        "title": "El Barrio Del Tambor",
+        "orchestra": "Anibal Troilo",
+        "singer": "Alberto Marino",
+        "style": "milonga",
+        "year": 1943.0,
+        "composite_score": 0.5496639415476896
+      }
+    ]
+  }
+]

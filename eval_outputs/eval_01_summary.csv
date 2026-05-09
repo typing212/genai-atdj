@@ -1,0 +1,5 @@
+method,prompt,translation_latency_s,selection_latency_s,total_latency_s,mean_tanda_score,tanda_size,feature_coverage,has_tanda,valid_combo,valid_size,valid_style
+our_pipeline,"romantic Di Sarli tango from the 1940s, smooth and lyrical",4.784,1.942,6.726,0.695,4,4,True,True,True,True
+our_pipeline,"fast D'Arienzo tango, very danceable, high energy",4.039,0.271,4.31,0.6795,4,4,True,True,True,True
+our_pipeline,"slow melancholic Pugliese tango, dramatic and intense",5.198,0.176,5.373,0.7301,4,4,True,True,True,True
+our_pipeline,"lively milonga, fast and playful",2.955,0.321,3.277,0.7173,3,4,True,True,True,True

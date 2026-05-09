@@ -1,0 +1,26 @@
+[
+  {
+    "layer": "catalog_csv_load",
+    "cold_s": 0.0017,
+    "warm_s": 5.7e-05,
+    "speedup_x": 29.4,
+    "saved_ms": 1.61,
+    "notes": "294 rows loaded"
+  },
+  {
+    "layer": "catalog_feature_ranges",
+    "cold_s": 0.0005,
+    "warm_s": 3.4e-05,
+    "speedup_x": 15.3,
+    "saved_ms": 0.48,
+    "notes": "4 features cached"
+  },
+  {
+    "layer": "llm_translation",
+    "cold_s": 6.3353,
+    "warm_s": 9.2e-05,
+    "speedup_x": 69206.5,
+    "saved_ms": 6335.21,
+    "notes": "prompt='romantic Di Sarli tango from the 1940s, '"
+  }
+]
